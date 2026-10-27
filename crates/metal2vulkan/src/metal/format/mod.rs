@@ -137,9 +137,9 @@ pub enum FormatEmulation {
     /// `R16G16B16A16_SFLOAT` of a converted format's (a grid of `1/2048`),
     /// `R32G32B32A32_SFLOAT` of an `_sRGB` twin's (a grid of `1/8192`), and
     /// `A2B10G10R10_UNORM_PACK32` of the codes. Exact for a sampled image a function reads or
-    /// fetches from, and for a linear sample the function emulates (Metal's filter of the texels on
-    /// their grid, `metal::texel_format::PackedTexels::YCbCr2048` and `YCbCr8192`); a linear sample
-    /// the emulation does not reach is the device's filter, noted. Admitted for sampling only:
+    /// fetches from; a linear sample is the device's filter of the texels, noted, off their grid
+    /// (`metal::texel_format::PackedTexels::YCbCr2048` and `YCbCr8192`), but where the function
+    /// reads the planes in place (`bind::YCbCrInPlace`), Metal's filter. Admitted for sampling only:
     /// Metal drops a function's writes to a 4:2:0 or 4:2:2 format ([`writes_dropped`]), stores a
     /// 4:4:4 one's into both planes (which a slot that only writes one of [`ycbcr_writes_stored`]
     /// does through the texture's write shadow; the others are refused), and renders into such a

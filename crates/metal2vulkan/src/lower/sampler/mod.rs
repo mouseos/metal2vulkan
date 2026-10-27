@@ -920,11 +920,11 @@ impl Sampling {
     /// sampled image, and null select, the sparse arm, a bias past the limit's derivatives,
     /// `bias_gradients`, and (for a dynamic bias) the test, the selection, and the second sample, a
     /// `half` texel's call of its conversion routine or its exact rounding outside the bicubic
-    /// filter, an sRGB texel's raw decode and a linear sample's emulation, a cube gradient's
-    /// footprint, an argument buffer's pixel sampler's flagged fetch, a snapped coordinate and the
-    /// positions of an observed footprint, a cube direction's broken ties, a runtime pixel
-    /// sampler's texel centre, a level on Metal's grid, a comparison the shader makes, and a
-    /// border axis's flush of a subnormal coordinate.
+    /// filter, an sRGB texel's raw decode, a cube gradient's footprint, an argument buffer's pixel
+    /// sampler's flagged fetch, a snapped coordinate and the positions of an observed footprint,
+    /// the lanes Metal reads as constants, a cube direction's broken ties, a runtime pixel
+    /// sampler's texel centre, a raw heap sample's decode, and a border axis's flush of a subnormal
+    /// coordinate.
     pub fn words(&self) -> u32 {
         // A swizzled slot's sampling: its swizzle, and a gather's of each component.
         match (self.swizzle, &self.op) {

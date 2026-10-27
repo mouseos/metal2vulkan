@@ -1549,8 +1549,7 @@ pub enum OneTexel {
 /// conversion may not be. A slot's access notes it where its class names no measured family
 /// ([`unmeasured_class`]), the conversion's `OTHER` arm, and, where the access reads one texel, no
 /// packed field either: through a runtime sampler slot, where its word filters. Where the access
-/// converts the device's texel only under `arm`'s clauses (a runtime sampler's emulation of an
-/// 8-bit sRGB slot's raw codes, whose device arm alone converts one), the note holds there alone.
+/// converts the device's texel only under `arm`'s clauses, the note holds there alone.
 /// On a device that samples through Metal's own texture unit, an 8-bit sRGB format's class is
 /// Metal's too ([`unconverted_class`]); where that device also rounds to `half` as Metal does
 /// ([`half_families`]), every measured class's is, so the access notes it where the bound format's
