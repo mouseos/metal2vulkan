@@ -24,8 +24,8 @@ notices its own run provokes depends on what ran before it in the same process.
 
 **The one set of notices no case names is the device's own arithmetic.** The owner's rule
 (AGENTS.md, rule 1) makes the GPU's native arithmetic and value answers the contract — `float` and
-`half` maths, NaN bits, denormals, minimum and maximum, rounding, texel and colour conversions,
-sampling and filtering, resolves. Where the device has a native form it is the only form the
+`half` maths, NaN bits, denormals, minimum and maximum, rounding, texel, vertex and colour
+conversions, sampling and filtering, resolves. Where the device has a native form it is the only form the
 runtime builds, and the note that says so fires in nearly every case that computes, converts or
 samples. So the suite declares those notes itself, at the notices site, for every case:
 `replay::NATIVE_NOTES` lists them, chosen from the notes' own documentation (the translator's

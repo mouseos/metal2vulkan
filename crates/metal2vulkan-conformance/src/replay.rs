@@ -380,8 +380,9 @@ pub fn shared_memory_notice() -> crate::allowance::Allowance {
 /// - **rounding**: the native-half class (`native-half-conversion`, `native-half-quantize`), and
 ///   the device's own depth conversion and depth test (`unorm-depth-rounding`, `depth-denormals`,
 ///   `signed-depth-test`);
-/// - **texel and colour conversions**: `device-texel-conversion`, `half-texel-conversion`,
-///   `srgb-texel-decode`, `device-color-conversion`;
+/// - **texel, vertex and colour conversions**: `device-texel-conversion`,
+///   `half-texel-conversion`, `srgb-texel-decode`, the device's fixed-function conversion of a
+///   normalized vertex attribute (`device-vertex-conversion`), `device-color-conversion`;
 /// - **sampling and filtering**: `device-sampling`, `device-sample-level`, and Metal's own sampler
 ///   filtering a two-plane texture on MoltenVK (`half-sample-filter`, `float-sample-filter`,
 ///   `ycbcr-filter-not-exact`);
@@ -424,6 +425,7 @@ pub const NATIVE_NOTES: &[metal2vulkan_runtime::Degradation] = {
         D::DeviceTexelConversion,
         D::HalfTexelConversion,
         D::SrgbTexelDecode,
+        D::DeviceVertexConversion,
         D::DeviceColorConversion,
         D::DeviceSampling,
         D::DeviceSampleLevel,
