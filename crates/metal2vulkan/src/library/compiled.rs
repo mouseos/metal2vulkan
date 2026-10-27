@@ -325,7 +325,7 @@ impl CompiledFunction {
             VertexFetch::Pulled { buffer_index, .. } => {
                 Some((input.index, AttributeFetch::Pulled { buffer_index }))
             }
-            VertexFetch::FixedFunction { .. } => None,
+            VertexFetch::FixedFunction => None,
         });
         let stage_in = io.stage_in.iter().map(|input| {
             (
