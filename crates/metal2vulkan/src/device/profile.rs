@@ -502,9 +502,6 @@ pub struct ProfileFields {
     pub isolation: GuestIsolation,
     /// Whether a texel's value is the device's conversion or Metal's (the policy's).
     pub texel_conversion: crate::device::policy::TexelConversionPolicy,
-    /// Whether a normalized vertex attribute is converted by fixed-function vertex input or
-    /// pulled and divided exactly in the shader (the policy's).
-    pub vertex_normalized: crate::device::policy::VertexNormalizedPolicy,
     pub leaf: LeafCaps,
     pub subgroup: SubgroupModel,
     pub images: ImageCaps,

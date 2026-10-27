@@ -37,9 +37,6 @@ pub struct DevicePolicy {
     /// device sampling, the default off Apple's GPUs) or Metal's, converted exactly in the
     /// shader.
     pub texel_conversion: TexelConversionPolicy,
-    /// Whether a normalized vertex attribute's value is the device's fixed-function conversion of
-    /// its codes (the default) or Metal's, divided exactly in the shader.
-    pub vertex_normalized: VertexNormalizedPolicy,
 
     /// Whether a texture whose format the device lacks, held in a carrier (an ASTC LDR texture,
     /// or an EAC 11-bit one), samples a decoded twin of compact codes (the default) or of Metal's
@@ -90,7 +87,6 @@ impl DevicePolicy {
         sampling: SamplingPolicy::NativeDevice,
         ycbcr_filter: YCbCrFilterPolicy::Device,
         texel_conversion: TexelConversionPolicy::Device,
-        vertex_normalized: VertexNormalizedPolicy::Device,
         decoded_texels: DecodedTexelsPolicy::Compact,
         heap_compression: HeapCompressionPolicy::Compressed,
         completion: CompletionPolicy::Grouped,
@@ -100,8 +96,7 @@ impl DevicePolicy {
     };
 
     /// This policy with Metal's answer wherever the choices offer it: its texel conversions
-    /// ([`TexelConversionPolicy::Exact`]), its normalized vertex attributes
-    /// ([`VertexNormalizedPolicy::Exact`]), its filter of a
+    /// ([`TexelConversionPolicy::Exact`]), its filter of a
     /// two-plane YCbCr texture
     /// ([`YCbCrFilterPolicy::Exact`]), its decode of a carried texture's texels
     /// ([`DecodedTexelsPolicy::Exact`]), a heap's texture whose bytes alias the heap's
@@ -117,7 +112,6 @@ impl DevicePolicy {
         DevicePolicy {
             ycbcr_filter: YCbCrFilterPolicy::Exact,
             texel_conversion: TexelConversionPolicy::Exact,
-            vertex_normalized: VertexNormalizedPolicy::Exact,
             decoded_texels: DecodedTexelsPolicy::Exact,
             heap_compression: HeapCompressionPolicy::Uncompressed,
             completion: CompletionPolicy::Exact,
@@ -254,39 +248,6 @@ pub enum TexelConversionPolicy {
     /// Metal's conversion, emulated exactly by the bound format's class, of every read, and of
     /// every sample and gather where Metal's sampler is emulated: what validation compares against
     /// Metal's answers.
-    Exact,
-}
-
-/// Who converts a **normalized** vertex attribute: the Metal vertex and attribute formats whose
-/// fetch asks for a code divided by its own maximum (`UCharNormalized` through
-/// `Short4Normalized`, `UChar4Normalized_BGRA`, `Int1010102Normalized`, `UInt1010102Normalized`).
-///
-/// Metal's conversion is `c / (2^b - 1)` unsigned and `max(c / (2^(b-1) - 1), -1)` signed, each
-/// correctly rounded, which is what Vulkan's `UNORM` and `SNORM` fixed-function vertex input
-/// states as well. A driver whose conversion multiplies by the reciprocal instead is one `f32`
-/// ulp off at some codes, and nothing in the attribute's own Vulkan format says to correct it
-/// after the load, so the exact form moves the fetch into the shader, where
-/// `lower::stage_io::fetch`'s `div_exact` computes the quotient in integer arithmetic.
-///
-/// The choice is per attribute, and it is a variant count as much as a cost: every format the
-/// device fetches in fixed function shares one module, while a pulled attribute's decode is its
-/// own program. Over `cases::vertex_formats`' 45-format sweep on an Apple M3 Max
-/// (`moltenvk-m3`, `tests::engine_vertex_variants`) the `float4` entry compiles 2 modules under
-/// [`VertexNormalizedPolicy::Device`] and 21 under [`VertexNormalizedPolicy::Exact`], and the
-/// `half4` entry 1 against 20. The runtime's own counter reads the same over the whole case on an
-/// Apple M3 Max: `shader_modules_made` 2 of 45 creations against 21, and 1 against 20.
-#[non_exhaustive]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum VertexNormalizedPolicy {
-    /// The device's, by fixed-function vertex input of the attribute's own `UNORM` or `SNORM`
-    /// format (the default): one module for every format the device fetches, and the conversion
-    /// the driver implements.
-    #[default]
-    Device,
-    /// Metal's, computed exactly in the shader: the attribute is pulled from its vertex buffer
-    /// and its codes divided by `lower::stage_io::fetch`'s integer sequence, as a format the
-    /// fixed-function path cannot fetch at all already is. One module per format.
     Exact,
 }
 

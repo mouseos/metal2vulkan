@@ -307,24 +307,16 @@ fn below_1_2_and_contradictory_policies_are_refused() {
 }
 
 /// Each of the policy's choices between the device's answer and Metal's, with a function that
-/// flips it alone: the texel conversions, a normalized vertex attribute's conversion, and the filter
-/// of a two-plane YCbCr texture.
-fn exactness_flips() -> [(&'static str, fn(DevicePolicy) -> DevicePolicy); 3] {
+/// flips it alone: the texel conversions and the filter of a two-plane YCbCr texture.
+fn exactness_flips() -> [(&'static str, fn(DevicePolicy) -> DevicePolicy); 2] {
     use crate::device::{
-        TexelConversionPolicy as T, VertexNormalizedPolicy as V, YCbCrFilterPolicy as Y,
+        TexelConversionPolicy as T, YCbCrFilterPolicy as Y,
     };
     [
         ("texel_conversion", |p| DevicePolicy {
             texel_conversion: match p.texel_conversion {
                 T::Device => T::Exact,
                 T::Exact => T::Device,
-            },
-            ..p
-        }),
-        ("vertex_normalized", |p| DevicePolicy {
-            vertex_normalized: match p.vertex_normalized {
-                V::Device => V::Exact,
-                V::Exact => V::Device,
             },
             ..p
         }),
