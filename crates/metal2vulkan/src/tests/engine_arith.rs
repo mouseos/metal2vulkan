@@ -2175,21 +2175,21 @@ fn every_profile() -> Vec<String> {
     out
 }
 
-/// Metal's fast division answers `0x7FC00000` for a NaN divisor of either sign (RADV answered
-/// `0xffc00000`, a probe cases 9496749c and 3921d3e2), a NaN numerator, `0 / 0` and `inf / inf`,
-/// which the module selects after the device's `OpFDiv` where the profile does not leave NaNs to
-/// the device (where it does, the device's `OpFDiv` answers it; `inf / 2^127`, Metal's `inf · 0`
-/// of its flushed reciprocal, is the device's infinity); its `f32`
-/// denormals are the device's on every committed profile. The operands are integer bits, so the
-/// division is the kernel's only float operation, and it records the device's arithmetic, its
-/// division and its denormals, and no NaN note. The interpreter keeps NaN payloads, so each NaN
-/// answer is the lowering's.
+/// Metal's fast division answers `0x7FC00000` for a NaN divisor of either sign, a NaN numerator,
+/// `0 / 0` and `inf / inf`; the module leaves that NaN to the device's `OpFDiv` on every profile
+/// (RADV answered `0xffc00000` for a negative NaN divisor, a probe cases 9496749c and 3921d3e2),
+/// selecting none, so the module is the same on both sides of `MetalCanonicalNans`, and records
+/// `PrecisionNote::NativeNanEncoding` where the device is not measured to answer Metal's. Its
+/// `f32` denormals are the device's on every committed profile. The operands are integer bits, so
+/// the division is the kernel's only float operation, and it records the device's arithmetic, its
+/// division and its denormals, and never `DeviceNanEncoding`. The interpreter answers a NaN, its
+/// bits the device's, and `6 / 3` exactly.
 #[test]
-fn a_fast_division_answers_metals_nans_on_every_profile() {
+fn a_fast_division_leaves_its_nans_to_the_device() {
     let bits = |name: &str, b: u32| {
         format!("  %{name}.i = call i32 @llvm.umin.i32(i32 {b}, i32 -1)\n  %{name} = bitcast i32 %{name}.i to float\n")
     };
-    let kernel = |name: &'static str, x: u32, y: u32, want: u32| Kernel {
+    let kernel = |name: &'static str, x: u32, y: u32, want: Option<u32>| Kernel {
         name,
         body: format!(
             "{}{}  %r = fdiv arcp float %x, %y\n",
@@ -2197,27 +2197,30 @@ fn a_fast_division_answers_metals_nans_on_every_profile() {
             bits("y", y)
         ),
         float: true,
-        want: Some(want),
+        want,
         needs: &[],
         note: None,
     };
-    let nan = 0x7FC0_0000;
     let ks = [
-        kernel("fast_one_by_nan", 0x3F80_0000, 0x7FC0_0000, nan),
-        kernel("fast_inf_by_nan", 0x7F80_0000, 0x7FC0_0000, nan),
-        kernel("fast_one_by_negative_nan", 0x3F80_0000, 0xFFC0_0000, nan),
-        kernel("fast_nan_by_two", 0x7FC0_0001, 0x4000_0000, nan),
-        kernel("fast_zero_by_zero", 0, 0, nan),
-        kernel("fast_inf_by_inf", 0x7F80_0000, 0x7F80_0000, nan),
-        kernel("fast_six_by_three", 0x40C0_0000, 0x4040_0000, 0x4000_0000),
+        kernel("fast_one_by_nan", 0x3F80_0000, 0x7FC0_0000, None),
+        kernel("fast_inf_by_nan", 0x7F80_0000, 0x7FC0_0000, None),
+        kernel("fast_one_by_negative_nan", 0x3F80_0000, 0xFFC0_0000, None),
+        kernel("fast_nan_by_two", 0x7FC0_0001, 0x4000_0000, None),
+        kernel("fast_zero_by_zero", 0, 0, None),
+        kernel("fast_inf_by_inf", 0x7F80_0000, 0x7F80_0000, None),
+        kernel(
+            "fast_six_by_three",
+            0x40C0_0000,
+            0x4040_0000,
+            Some(0x4000_0000),
+        ),
     ];
     let Some(bitcode) = assemble("fast-divide-specials", &module(&ks)) else {
         return;
     };
+    nans_are_the_device_s(&bitcode, &ks, false, &[], &|_, fact| !fact);
     for stem in every_profile() {
         let p = profile(&stem, exact_maths()).expect("profile");
-        let metal_functions =
-            p.takes_driver_deviation(crate::error::DriverDeviation::MetalFloatFunctions);
         let device_nans =
             p.takes_driver_deviation(crate::error::DriverDeviation::MetalCanonicalNans);
         for kk in &ks {
@@ -2235,22 +2238,22 @@ fn a_fast_division_answers_metals_nans_on_every_profile() {
                     a.precision
                 );
             }
+            assert_eq!(
+                a.precision.contains(&PrecisionNote::NativeNanEncoding),
+                !device_nans,
+                "{what}: {:?}",
+                a.precision
+            );
             assert!(
                 !a.precision.contains(&PrecisionNote::DeviceNanEncoding),
                 "{what}: {:?}",
                 a.precision
             );
-            // Where the device answers Metal's canonical NaN itself (the measured
-            // `MetalCanonicalNans`), the interpreter's NaN is no Metal's.
-            if device_nans && kk.want == Some(nan) {
-                continue;
-            }
             let got = interpret(&bitcode, kk.name, &p);
-            assert_eq!(
-                Some(got),
-                kk.want,
-                "{what} (Metal's functions: {metal_functions}): {got:#x}"
-            );
+            match kk.want {
+                Some(want) => assert_eq!(got, want, "{what}: {got:#x}"),
+                None => assert!(stores_nan(got, false), "{what}: {got:#x}"),
+            }
         }
     }
 }
