@@ -8,8 +8,8 @@
 
 use crate::device::{
     BatchOrderPolicy, CompletionPolicy, DecodedTexelsPolicy, DevicePolicy, FloatMathsPolicy,
-    HalfRoundingPolicy, HeapCompressionPolicy, HostPageTexturePolicy, MultisampleDepthTwinPolicy,
-    NanMinMaxPolicy, RenderLoweringPolicy, ResolvePolicy, RoundingOrderPolicy, SamplingPolicy,
+    HeapCompressionPolicy, HostPageTexturePolicy, MultisampleDepthTwinPolicy, NanMinMaxPolicy,
+    RenderLoweringPolicy, ResolvePolicy, RoundingOrderPolicy, SamplingPolicy,
     TexelConversionPolicy, TileStorePolicy, Unorm8LinearFilterPolicy, VertexNormalizedPolicy,
     YCbCrFilterPolicy,
 };
@@ -67,7 +67,6 @@ fn choices() -> Vec<Choice> {
         float_maths: _,
         texel_conversion: _,
         vertex_normalized: _,
-        half_rounding: _,
         nan_and_min_max: _,
         rounding_order: _,
         // The runtime's: where a multisampled `Depth32Float` texture's texels are held, the
@@ -93,7 +92,6 @@ fn choices() -> Vec<Choice> {
         choice!(p.float_maths: FloatMathsPolicy { Native, Exact }),
         choice!(p.texel_conversion: TexelConversionPolicy { Device, Exact }),
         choice!(p.vertex_normalized: VertexNormalizedPolicy { Device, Exact }),
-        choice!(p.half_rounding: HalfRoundingPolicy { Native, Exact }),
         choice!(p.nan_and_min_max: NanMinMaxPolicy { Native, Exact }),
         choice!(p.rounding_order: RoundingOrderPolicy { Native, Exact }),
         choice!(p.multisample_depth_twin: MultisampleDepthTwinPolicy { Device, Exact }),
@@ -149,8 +147,6 @@ fn notes() -> Vec<(&'static str, Ledger)> {
             NativeMinMax,
             NativeDot,
             NativeMix,
-            NativeHalfConversion,
-            NativeHalfQuantize,
         ],
         NotBuilt: [
             ExtendedRangeBlendSource,
@@ -172,6 +168,8 @@ fn notes() -> Vec<(&'static str, Ledger)> {
         ],
         Elsewhere: [
             HalfOutputPrecision,
+            NativeHalfConversion,
+            NativeHalfQuantize,
             F16FmaDoubleRounding,
             F16IntConvDoubleRounding,
             GradFromBias,
@@ -388,12 +386,12 @@ fn the_ledger_readers_read_names_and_switches() {
     );
     assert_eq!(code("DeviceSignedZeroInfNan"), "device-signed-zero-inf-nan");
     let text = "`sampling = SamplingPolicy::Exact` and `DevicePolicy::exact_answers()`, \
-                `HalfRoundingPolicy::Exact`.";
+                `CompletionPolicy::Exact`.";
     assert_eq!(
         policy_values(text),
         BTreeSet::from([
             "SamplingPolicy::Exact".to_owned(),
-            "HalfRoundingPolicy::Exact".to_owned()
+            "CompletionPolicy::Exact".to_owned()
         ])
     );
     assert_eq!(

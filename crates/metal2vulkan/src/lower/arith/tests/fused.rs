@@ -906,7 +906,8 @@ fn fused_multiply_add_routines_fit_their_word_estimates() {
             "{what}: {words} words against the estimate {estimate} (within its last third)"
         );
     };
-    for q in [QuantizeForm::Integer, QuantizeForm::Device] {
+    {
+        let q = QuantizeForm::Device;
         let in_q = |defs: &dyn Fn(&mut ModuleBuilder) -> BResult<()>| {
             defined_words(&|b| {
                 b.set_quantize_form(q);
@@ -1013,11 +1014,6 @@ fn a_route_on_several_lane_counts_holds_its_sequence_once() {
     let again = fmas.clone();
     fma::complete(&mut fmas, q);
     assert_eq!(fmas, again);
-    // In the integer rounding a `half` sequence is the larger by its rounding: on two and four
-    // lanes too, its routines call the one-lane routine.
-    let mut half = BTreeSet::from([r(Route::HalfOdd, 2), r(Route::HalfOdd, 4)]);
-    fma::complete(&mut half, QuantizeForm::Integer);
-    assert!(half.contains(&r(Route::HalfOdd, 1)), "{half:?}");
 }
 
 /// Run Metal's `mix` ([`math::metal_mix`]) through `fma`'s route (its routine defined when it

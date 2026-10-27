@@ -1252,7 +1252,7 @@ impl HalfClass {
             lanes: 4,
         };
         let then: ArmFn<'_, ()> = Box::new(move |fb, _| {
-            let v = narrow::round_texel_plain(fb, half, x)?;
+            let v = narrow::round_texel(fb, half, x)?;
             Ok(ArmEnd::FallThrough(vec![v]))
         });
         let other: ArmFn<'_, ()> = Box::new(move |fb, _| {

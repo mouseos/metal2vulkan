@@ -308,13 +308,12 @@ fn below_1_2_and_contradictory_policies_are_refused() {
 
 /// Each of the policy's choices between the device's answer and Metal's, with a function that
 /// flips it alone: the maths functions, the texel conversions, a normalized vertex attribute's
-/// conversion, the `half` rounding, the NaN and minimum and maximum, the rounding order, and the
-/// filter of a two-plane YCbCr texture.
-fn exactness_flips() -> [(&'static str, fn(DevicePolicy) -> DevicePolicy); 7] {
+/// conversion, the NaN and minimum and maximum, the rounding order, and the filter of a two-plane
+/// YCbCr texture.
+fn exactness_flips() -> [(&'static str, fn(DevicePolicy) -> DevicePolicy); 6] {
     use crate::device::{
-        FloatMathsPolicy as F, HalfRoundingPolicy as H, NanMinMaxPolicy as N,
-        RoundingOrderPolicy as R, TexelConversionPolicy as T, VertexNormalizedPolicy as V,
-        YCbCrFilterPolicy as Y,
+        FloatMathsPolicy as F, NanMinMaxPolicy as N, RoundingOrderPolicy as R,
+        TexelConversionPolicy as T, VertexNormalizedPolicy as V, YCbCrFilterPolicy as Y,
     };
     [
         ("float_maths", |p| DevicePolicy {
@@ -335,13 +334,6 @@ fn exactness_flips() -> [(&'static str, fn(DevicePolicy) -> DevicePolicy); 7] {
             vertex_normalized: match p.vertex_normalized {
                 V::Device => V::Exact,
                 V::Exact => V::Device,
-            },
-            ..p
-        }),
-        ("half_rounding", |p| DevicePolicy {
-            half_rounding: match p.half_rounding {
-                H::Native => H::Exact,
-                H::Exact => H::Native,
             },
             ..p
         }),
@@ -369,9 +361,8 @@ fn exactness_flips() -> [(&'static str, fn(DevicePolicy) -> DevicePolicy); 7] {
     ]
 }
 
-/// On MoltenVK on the M3, whose functions, NaN, minimum and maximum and `half` rounding are
-/// measured to be Metal's, the maths functions', the `half` rounding's and the rounding order's
-/// choices change nothing, so each keys as the default does; the texel conversions' is the
+/// On MoltenVK on the M3, whose functions, NaN, minimum and maximum are measured to be Metal's,
+/// the maths functions' and the rounding order's choices change nothing, so each keys as the default does; the texel conversions' is the
 /// policy's own field there, the NaN and minimum and maximum's moves the texel
 /// NaN route (`TexelNanRoute`): a texel's NaN is the image's decode, which no arithmetic fact
 /// covers, and the YCbCr filter's moves whether a two-plane YCbCr slot takes its variant

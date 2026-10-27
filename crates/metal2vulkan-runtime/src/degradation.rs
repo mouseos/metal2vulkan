@@ -2211,9 +2211,8 @@ degradations! {
         /// `0x7fc00000`.
         DeviceTexelConversion = "device-texel-conversion";
         /// Class: native half rounding. The device's own conversion of a `float` to 16 bits
-        /// rounds the pipeline's `half` results where Metal's `half(float)` would be computed in
-        /// integer arithmetic (`HalfRoundingPolicy::Native`, the default, on a device whose
-        /// conversion is not measured to be Metal's). Recorded bound: a finite result within one
+        /// rounds the pipeline's `half` results, on a device with `shaderFloat16` whose float
+        /// controls do not make that conversion Metal's `half(float)`. Recorded bound: a finite result within one
         /// unit in the last place of the `half` (to nearest even on NVIDIA's RTX 5080 Laptop
         /// GPU, toward zero on its RTX 3090 and lavapipe); where the device rounds toward zero,
         /// 65504 from 65520 up where Metal answers infinity; a result below `2^-14` the zero of
@@ -2222,7 +2221,7 @@ degradations! {
         NativeHalfConversion = "native-half-conversion";
         /// Class: native half rounding. The device's `OpQuantizeToF16` rounds the pipeline's
         /// `half` results on a device without `shaderFloat16` whose quantize is not measured to
-        /// be Metal's (`HalfRoundingPolicy::Native`, the default). Recorded bound: a finite
+        /// be Metal's. Recorded bound: a finite
         /// result within one unit in the last place of the `half`; 65504 to 65520 possibly
         /// infinity where Metal answers 65504; a NaN's encoding the device's.
         NativeHalfQuantize = "native-half-quantize";
@@ -2692,7 +2691,6 @@ pub(crate) fn dropped_exact_forms(
             sampling,
             float_maths,
             texel_conversion,
-            half_rounding,
             nan_and_min_max,
             rounding_order,
         } => Some(
@@ -2700,7 +2698,6 @@ pub(crate) fn dropped_exact_forms(
                 (sampling, "exact sampling"),
                 (float_maths, "exact float maths"),
                 (texel_conversion, "exact texel conversion"),
-                (half_rounding, "exact half rounding"),
                 (nan_and_min_max, "exact NaN and minimum and maximum"),
                 (rounding_order, "exact rounding order"),
             ]

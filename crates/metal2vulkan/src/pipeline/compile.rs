@@ -2698,17 +2698,16 @@ fn compile_kept<K>(
             crate::spirv::requirements::snapshot_textures(&module, &own_pixel_textures, m)?
         }
     };
-    // A `half` rounded through `OpQuantizeToF16` (`QuantizeForm::Device`) because the device's
-    // is measured to round as Metal does: the module requires that fact. Elsewhere a `half` rounds
-    // by integer arithmetic, exact on every device, and no module holds a quantize.
+    // A `half` rounded through `OpQuantizeToF16` (`QuantizeForm::Device`): where the device's is
+    // measured to round as Metal does the module requires that fact, and elsewhere it records
+    // the native note.
     let mut precision = plan.precision.clone();
     let specialized = plan.specialized.clone();
     let device_quantize = plan.families.arith.quantize
         == crate::spirv::builder::QuantizeForm::Device
         && crate::lower::arith::narrow::quantizes(&module);
-    // A `half` rounded through the device's conversion to 16 bits and back, behind a barrier
-    // Metal's compiler cannot fold it through, with no quantize, because that conversion is
-    // Metal's: the module requires that fact.
+    // A `half` rounded through the device's conversion to 16 bits and back, with no quantize: the
+    // module records the native note.
     let converts = plan.families.arith.quantize == crate::spirv::builder::QuantizeForm::Converted
         && crate::lower::arith::narrow::rounds_by_conversion(&module, m)?;
     // A `half` rounded through the device's conversion and its widening, each decorated
@@ -2864,12 +2863,6 @@ fn compile_kept<K>(
         requirements
             .properties
             .insert(crate::device::requirements::VkProperty::MetalHalfQuantize);
-    }
-    // A `half` rounding left to the device's conversion because it is Metal's.
-    if converts && native_half.is_none() {
-        requirements
-            .properties
-            .insert(crate::device::requirements::VkProperty::MetalHalfConversion);
     }
     // Center varyings read as they are as their pixel form, because the device reads them at
     // the pixel center as Metal does.

@@ -230,7 +230,6 @@ surface! {
         enum FloatMathsPolicy N;
         enum TexelConversionPolicy N;
         enum VertexNormalizedPolicy N;
-        enum HalfRoundingPolicy N;
         enum NanMinMaxPolicy N;
         enum RoundingOrderPolicy N;
         enum MultisampleDepthTwinPolicy N;

@@ -796,7 +796,6 @@ pub enum RuntimeFact {
         sampling: bool,
         float_maths: bool,
         texel_conversion: bool,
-        half_rounding: bool,
         nan_and_min_max: bool,
         rounding_order: bool,
     },

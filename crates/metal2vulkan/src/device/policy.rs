@@ -47,11 +47,6 @@ pub struct DevicePolicy {
     /// Whether a normalized vertex attribute's value is the device's fixed-function conversion of
     /// its codes (the default) or Metal's, divided exactly in the shader.
     pub vertex_normalized: VertexNormalizedPolicy,
-    /// Whether a `half` result computed in `float` rounds to `half` through the device's own
-    /// conversion to 16 bits (or its `OpQuantizeToF16`) where neither is measured to be Metal's
-    /// (native half rounding, the default), or by the translation's integer rounding, Metal's on
-    /// every device.
-    pub half_rounding: HalfRoundingPolicy,
     /// Whether a NaN result's bits, and the operand Metal's minimum and maximum functions
     /// (`fmin`, `fmax`, `min3`, `max3`, `clamp`, `saturate`) pick at a NaN or a signed zero, are
     /// the device's own (the default) or Metal's.
@@ -112,7 +107,7 @@ impl DevicePolicy {
     /// The untrusted-guest production policy: containment and isolation on, Metal's 8-bit linear
     /// filter emulated exactly where the emulation runs, native device sampling (a two-plane YCbCr texture's samples among them),
     /// native device maths, the device's own texel
-    /// conversions, native half rounding, the device's NaN and minimum and maximum, the device's
+    /// conversions, the device's NaN and minimum and maximum, the device's
     /// rounding order, a
     /// multisampled `Depth32Float` texture's texels in a
     /// depth image, compact codes in a carried texture's decoded twin, the driver's compressed image of a
@@ -132,7 +127,6 @@ impl DevicePolicy {
         float_maths: FloatMathsPolicy::Native,
         texel_conversion: TexelConversionPolicy::Device,
         vertex_normalized: VertexNormalizedPolicy::Device,
-        half_rounding: HalfRoundingPolicy::Native,
         nan_and_min_max: NanMinMaxPolicy::Native,
         rounding_order: RoundingOrderPolicy::Native,
         multisample_depth_twin: MultisampleDepthTwinPolicy::Device,
@@ -149,7 +143,7 @@ impl DevicePolicy {
     /// This policy with Metal's answer wherever the choices offer it: its maths functions,
     /// divisions and fused multiply-adds ([`FloatMathsPolicy::Exact`]), its texel conversions
     /// ([`TexelConversionPolicy::Exact`]), its normalized vertex attributes
-    /// ([`VertexNormalizedPolicy::Exact`]), its `half` rounding ([`HalfRoundingPolicy::Exact`]), its
+    /// ([`VertexNormalizedPolicy::Exact`]), its
     /// NaN and minimum and maximum ([`NanMinMaxPolicy::Exact`]), its rounding order
     /// ([`RoundingOrderPolicy::Exact`]), its filter of a
     /// two-plane YCbCr texture
@@ -170,7 +164,6 @@ impl DevicePolicy {
             float_maths: FloatMathsPolicy::Exact,
             texel_conversion: TexelConversionPolicy::Exact,
             vertex_normalized: VertexNormalizedPolicy::Exact,
-            half_rounding: HalfRoundingPolicy::Exact,
             nan_and_min_max: NanMinMaxPolicy::Exact,
             rounding_order: RoundingOrderPolicy::Exact,
             multisample_depth_twin: MultisampleDepthTwinPolicy::Exact,
@@ -287,7 +280,7 @@ pub enum YCbCrFilterPolicy {
 /// are Metal's (MoltenVK on an Apple GPU, `DriverDeviation::MetalFloatFunctions`), the device's
 /// instructions are Metal's own whatever the policy. A NaN such a function answers is
 /// [`NanMinMaxPolicy`]'s, `dot`, `mix` and `fast::sqrt` are [`RoundingOrderPolicy`]'s, and a `half`
-/// result's rounding is [`HalfRoundingPolicy`]'s.
+/// result's rounding is the device's own (`lower::arith::narrow`).
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -374,37 +367,6 @@ pub enum VertexNormalizedPolicy {
     Exact,
 }
 
-/// How a `half` result the module computes in `float` (every `half` arithmetic but the device's
-/// 16-bit arithmetic and `Fma` where they are measured to be Metal's) is rounded to `half` on a
-/// device whose conversion to 16 bits and whose `OpQuantizeToF16` are not measured to round as
-/// Metal's `half(float)` does (the owner's "tiny half-precision values flushed to zero on some
-/// GPUs" of 2026-10-11, which the device's conversion may do besides its rounding, native by
-/// default). Where either is measured to be Metal's (`DriverDeviation::MetalHalfConversion`,
-/// MoltenVK on an Apple GPU; `DriverDeviation::MetalHalfQuantize`, MoltenVK, RADV and ANV where
-/// measured), or the device's float controls make the conversion Metal's by the Vulkan spec
-/// (`shaderFloat16` with `RoundingModeRTE`, `DenormPreserve` and `SignedZeroInfNanPreserve` for
-/// 16 bits, on a driver that keeps the conversion's round trip: ANV and RADV, which take it before
-/// a measured quantize), the module rounds through it under either policy.
-#[non_exhaustive]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum HalfRoundingPolicy {
-    /// Native half rounding (the default): the device's conversion of the `float` to 16 bits
-    /// and its widening where the profile has `shaderFloat16`, else the device's
-    /// `OpQuantizeToF16` with a result below the smallest normal `half` rounded exactly. Such a
-    /// module records
-    /// [`PrecisionNote::NativeHalfConversion`](crate::pipeline::PrecisionNote::NativeHalfConversion)
-    /// or
-    /// [`PrecisionNote::NativeHalfQuantize`](crate::pipeline::PrecisionNote::NativeHalfQuantize),
-    /// whose docs state the bound, and requires no measured fact.
-    #[default]
-    Native,
-    /// Metal's rounding on every device: integer arithmetic on the `float`'s bits, about twenty
-    /// instructions a rounding, where the native forms take three: larger modules and longer
-    /// pipeline creation.
-    Exact,
-}
-
 /// Whose NaN a `float` or `half` result answers, and which operand Metal's minimum and maximum
 /// functions (`fmin`, `fmax`, `min3`, `max3`, `clamp`, and `saturate`, Metal's
 /// `clamp(x, +0, 1)`) pick at a NaN, a signed zero or an `f32` denormal, on a device not measured
@@ -431,8 +393,8 @@ pub enum NanMinMaxPolicy {
     /// Metal's: the translation selects Metal's NaN where the device may answer another, and
     /// Metal's operand where the device's instructions may pick another; a `half` widened to
     /// `float` answers `0x7fc00000` for every NaN, as Metal does. A `half` texel read, sampled or
-    /// gathered keeps the NaN the device decoded through native half rounding too
-    /// (`HalfRoundingPolicy::Native`) and through the conversion under the float controls, and a
+    /// gathered keeps the NaN the device decoded through native half rounding too and through the
+    /// conversion under the float controls, and a
     /// `half` read from its bits is decoded in integer arithmetic where the default takes the
     /// device's widening (a `half` stored back unchanged keeps its bits under either).
     Exact,

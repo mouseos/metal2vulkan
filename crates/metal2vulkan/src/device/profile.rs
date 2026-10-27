@@ -505,11 +505,6 @@ pub struct ProfileFields {
     /// Whether a normalized vertex attribute is converted by fixed-function vertex input or
     /// pulled and divided exactly in the shader (the policy's).
     pub vertex_normalized: crate::device::policy::VertexNormalizedPolicy,
-    /// Whose `half` rounding a module takes: Metal's (a measured form, or the integer rounding
-    /// the policy's `HalfRoundingPolicy::Exact` asks for) or the device's own conversion or
-    /// quantize (`lower::arith::narrow::quantize_form`). Derived, so a device measured to round
-    /// as Metal does keys the same under both policies.
-    pub half_rounding: HalfRoundingRoute,
     pub leaf: LeafCaps,
     pub subgroup: SubgroupModel,
     pub images: ImageCaps,
@@ -695,19 +690,6 @@ pub enum FloatFunctions {
     Device,
     /// The device's, within Vulkan's precision table, taken as they are: native device maths
     /// (`FloatMathsPolicy::Native`, the default), each kind recorded with its bound.
-    Native,
-}
-
-/// Whose rounding a `half` result takes ([`ProfileFields::half_rounding`]).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum HalfRoundingRoute {
-    /// Metal's: the device's conversion or quantize where it is measured to round as Metal does
-    /// (`DriverDeviation::MetalHalfConversion`, `DriverDeviation::MetalHalfQuantize`), else
-    /// integer arithmetic.
-    Metal,
-    /// The device's own conversion or quantize where neither is measured to be Metal's: native
-    /// half rounding (`HalfRoundingPolicy::Native`, the default), each kind recorded with its
-    /// bound.
     Native,
 }
 

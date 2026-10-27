@@ -1284,7 +1284,6 @@ codec_enum! {
             sampling,
             float_maths,
             texel_conversion,
-            half_rounding,
             nan_and_min_max,
             rounding_order
         },

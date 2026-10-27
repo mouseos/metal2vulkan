@@ -1341,7 +1341,7 @@ pub fn declare(
         if s.half_format && d.half_routine.is_none() {
             d.half_routine = Some(half::define(mb, plan.families.texture.half_families)?);
         }
-        if s.half_format && half::takes_plain_arm(mb, plan.families.texture.half_families) {
+        if s.half_format && half::takes_plain_arm(plan.families.texture.half_families) {
             let b = mb.ty(SType::Bool)?;
             let c = mb.spec(
                 crate::pipeline::sym::SpecKey::PlainHalfTexels(s.slot),

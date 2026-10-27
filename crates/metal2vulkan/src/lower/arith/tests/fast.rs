@@ -554,7 +554,7 @@ fn a_fast_division_fits_its_word_estimate() {
                 + routine.words()
                 + fma
                     .routine()
-                    .map_or(0, |r| r.words(crate::spirv::builder::QuantizeForm::Integer)))
+                    .map_or(0, |r| r.words(crate::spirv::builder::QuantizeForm::Device)))
                 as usize;
             if used - bare > bound {
                 over.push(format!(

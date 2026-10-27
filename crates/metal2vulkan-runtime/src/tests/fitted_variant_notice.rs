@@ -78,7 +78,6 @@ fn fit_into(dependencies: &mut Vec<RuntimeDependency>) {
             sampling: true,
             float_maths: true,
             texel_conversion: false,
-            half_rounding: false,
             nan_and_min_max: false,
             rounding_order: false,
         },
