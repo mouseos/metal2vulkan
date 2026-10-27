@@ -63,9 +63,7 @@ fn device(stem: &str, policy: DevicePolicy) -> Device {
 /// `None` where it records none.
 fn dropped(dependencies: &[RuntimeDependency]) -> Option<[bool; 1]> {
     dependencies.iter().find_map(|d| match d.fact {
-        RuntimeFact::ExactFormsOverCompilerLimit {
-            nan_and_min_max,
-        } => Some([nan_and_min_max]),
+        RuntimeFact::ExactFormsOverCompilerLimit { nan_and_min_max } => Some([nan_and_min_max]),
         _ => None,
     })
 }

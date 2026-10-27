@@ -29,7 +29,7 @@ use crate::bind::{
     BindState, BoundBuffer, BoundTexture, ImageSource, StageTable, TextureFacts, WriteSource,
 };
 use crate::budget::{Budget, SPIRV_WORDS};
-use crate::device::{Device, DeviceDescription, FormatUsage};
+use crate::device::{Device, DeviceDescription, DevicePolicy, FormatUsage};
 use crate::library::{FunctionConstantValues, Library};
 use crate::lower::select::{LowerInputs, Plan};
 use crate::metal::texel_format::srgb_raw_view;

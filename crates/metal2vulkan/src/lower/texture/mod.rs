@@ -2186,11 +2186,7 @@ pub fn routine_words(
             heap_raw::ROUTINE_WORDS * texture.heap_raw.len() as u64,
         )
     });
-    flags
-        .into_iter()
-        .chain(classes)
-        .chain(half)
-        .chain(raw)
+    flags.into_iter().chain(classes).chain(half).chain(raw)
 }
 
 /// The census name of the words a heap texel class costs: the module's table of classes and, where
