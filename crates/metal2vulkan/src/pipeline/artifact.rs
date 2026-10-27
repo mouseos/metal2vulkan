@@ -1159,8 +1159,8 @@ pub enum PrecisionNote {
     /// - a heap texture;
     /// - a runtime or argument buffer's sampler.
     ///
-    /// Not this note's: a `Depth32Float` texture's depth image that a device's comparison reads, which RADV holds a denormal in as zero
-    /// ([`PrecisionNote::DeviceDepthComparison`]).
+    /// Not this note's: a `Depth32Float` texture's depth image that a device's comparison reads,
+    /// which RADV holds a denormal in as zero ([`PrecisionNote::DeviceDepthComparison`]).
     ///
     /// Validation derives no tolerance and no explanation from it, as for `DeviceDenormals`.
     DeviceTexelDenormals,

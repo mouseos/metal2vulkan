@@ -1231,8 +1231,8 @@ fn tiled_shape(shape: ImageShape) -> bool {
 /// function records `PrecisionNote::RestrictedDepthRange`. Its reads, samples and gathers, and the
 /// comparisons the shader makes of them, record nothing: the interface's `TextureSlot::access`
 /// states them, and the consumer announces an upload its depth image may clamp
-/// (`restricted-depth-upload`), which every read of it then reads. No module requires the extension, since every value within
-/// `[0, 1]` is exact without it.
+/// (`restricted-depth-upload`), which every read of it then reads. No module requires the
+/// extension, since every value within `[0, 1]` is exact without it.
 pub(crate) fn depth_comparison(cx: &mut SelectCx<'_>) {
     let enabled = &cx.profile.fields().enabled;
     if enabled

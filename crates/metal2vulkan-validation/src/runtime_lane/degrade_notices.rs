@@ -139,15 +139,15 @@
 //! where the compile layer runs the dispatch on no emulated variant, a one-aspect resolve where the
 //! device resolves the aspects independently, both properties no device option withholds,
 //! uncalibrated GPU times where the device calibrates its timestamps, an unlisted sampler state
-//! where the device's and the pipeline's sampler arrays hold its ID, an upload into a depth image where the device enabled
-//! `VK_EXT_depth_range_unrestricted` or its driver keeps a value outside `[0, 1]` without it, and a
-//! `Shared` buffer in system memory where the device has unified memory, a heap's depth or stencil
-//! texture where the driver lays no such image apart, and a depth or stencil texture without
-//! GPU-optimized contents where the driver drops the layout, emulated mesh draws where the
-//! device has `VK_EXT_mesh_shader`, a capped anisotropy where the device's samplers take 32
-//! or none, and a vertex simdgroup grouping where the driver groups vertices as Apple's GPUs do or
-//! the vertex stage has no subgroups) is expected absent there, as the
-//! compile layer, the device's description or its driver facts settle it.
+//! where the device's and the pipeline's sampler arrays hold its ID, an upload into a depth image
+//! where the device enabled `VK_EXT_depth_range_unrestricted` or its driver keeps a value outside
+//! `[0, 1]` without it, and a `Shared` buffer in system memory where the device has unified memory,
+//! a heap's depth or stencil texture where the driver lays no such image apart, and a depth or
+//! stencil texture without GPU-optimized contents where the driver drops the layout, emulated mesh
+//! draws where the device has `VK_EXT_mesh_shader`, a capped anisotropy where the device's samplers
+//! take 32 or none, and a vertex simdgroup grouping where the driver groups vertices as Apple's
+//! GPUs do or the vertex stage has no subgroups) is expected absent there, as the compile layer,
+//! the device's description or its driver facts settle it.
 
 use super::absent_reads::ABSENT_READS;
 use super::amplified_draws::AMPLIFICATION;
@@ -2106,10 +2106,9 @@ pub(super) fn clamps_depth_uploads(device: &Device) -> bool {
 
 /// Whether `device` keeps a negative or NaN 32-bit float depth a write stores in a render
 /// target's depth image (not [`clamps_depth_uploads`]) and its depth test compares it as it is,
-/// where Metal's compares its magnitude (no `DriverFact::DepthTestComparesMagnitudes`): a
-/// single-sample `Depth32Float` target then renders a pass that loads it over its magnitude
-/// stand-in (`texture/signed_depth.rs`), and a write into a multisampled or combined
-/// depth/stencil one announces `signed-depth-test`.
+/// where Metal's compares its magnitude (no `DriverFact::DepthTestComparesMagnitudes`): a write
+/// that may store such a value in a render target's `Depth32Float` or `Depth32Float_Stencil8`
+/// depth then announces `signed-depth-test`.
 pub(super) fn signs_depth_tests(device: &Device) -> bool {
     let magnitudes = device
         .properties()

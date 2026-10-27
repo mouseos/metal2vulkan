@@ -91,9 +91,9 @@ impl DevicePolicy {
     /// filter emulated exactly where the emulation runs, native device sampling (a two-plane YCbCr texture's samples among them),
     /// native device maths, the device's own texel
     /// conversions, the device's NaN and minimum and maximum, the device's rounding order, compact
-    /// codes in a carried texture's decoded twin, the driver's compressed image of a
-    /// heap's texture Metal keeps compressed, command buffers ready together in one kernel
-    /// submission, batches of one queue ordered by their ends where the driver runs them one after another, and a sampled
+    /// codes in a carried texture's decoded twin, the driver's compressed image of a heap's texture
+    /// Metal keeps compressed, command buffers ready together in one kernel submission, batches of
+    /// one queue ordered by their ends where the driver runs them one after another, and a sampled
     /// texture over host pages in place where the device's check passed.
     pub const UNTRUSTED: DevicePolicy = DevicePolicy {
         pointer_domain: PointerDomain::ResidentTable,

@@ -75,7 +75,6 @@ fn modules() -> Vec<Build> {
     plain!(
         capture_assembly_module,
         capture_settle_module,
-        depth_magnitude_module,
         flat_dispatch_module,
         index_bounds_fill_module,
         index_bounds_plan_module,

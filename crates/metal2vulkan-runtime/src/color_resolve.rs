@@ -189,10 +189,10 @@ pub(super) fn of_resolve(
         .ok_or(Error::NotImplemented(RuntimeGap::Render))
 }
 
-/// Whether the crate-owned resolve may read the color attachment `source`, whose image takes no input
-/// attachment usage, from a copy of its samples (the module docs): its image takes transfer reads,
-/// and the device copies images of its format both ways, which the scratch image the copy writes
-/// needs.
+/// Whether the crate-owned resolve may read the color attachment `source`, whose image takes no
+/// input attachment usage, from a copy of its samples (the module docs): its image takes transfer
+/// reads, and the device copies images of its format both ways, which the scratch image the copy
+/// writes needs.
 fn copied(device: &Device, source: &Target) -> Result<bool, Error> {
     let usage = source.texture.image_plan()?.usage;
     let profile = device.compile_device().profile();
@@ -217,9 +217,9 @@ pub(super) fn from_planes(format: Format, samples: u32) -> bool {
 
 /// Resolve each color attachment of `layout` (a pass's, as it ends) whose
 /// sample planes hold its samples, its last instance leaving it out of the draws' subpass
-/// (`last_storage`), by the crate-owned resolve from them where [`from_planes`] says so: neither merged
-/// back for the device's resolve nor resolved in one more instance. Not in a layered pass: the
-/// planes hold one layer.
+/// (`last_storage`), by the crate-owned resolve from them where [`from_planes`] says so: neither
+/// merged back for the device's resolve nor resolved in one more instance. Not in a layered pass:
+/// the planes hold one layer.
 pub(super) fn resolve_planes(layout: &mut PassLayout, last_storage: &[u32]) {
     if layout.layers > 1 {
         return;
@@ -241,9 +241,10 @@ pub(super) fn resolve_planes(layout: &mut PassLayout, last_storage: &[u32]) {
 }
 
 /// Whether a multisampled color attachment of `pf` may resolve into its format's sRGB twin, which
-/// the crate-owned resolve reads it for on every device (`resolve.rs`): the twin's format has Metal's rules at `samples`. Its image, and the stand-in
-/// a pass renders it into (`attachment_stand_in.rs`), take the input attachment usage that
-/// resolve reads them through where it is free.
+/// the crate-owned resolve reads it for on every device (`resolve.rs`): the twin's format has
+/// Metal's rules at `samples`. Its image, and the stand-in a pass renders it into
+/// (`attachment_stand_in.rs`), take the input attachment usage that resolve reads them through
+/// where it is free.
 pub(super) fn twin_resolved(pf: PixelFormat, samples: u32) -> bool {
     samples > 1
         && srgb_twin(pf)

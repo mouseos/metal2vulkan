@@ -1168,11 +1168,11 @@ impl BoundTexture {
 impl TextureFacts {
     /// The facts of an image texture that can change a plan (its view facts): the type, the pixel
     /// format, the sample count, the usage, whether it is sparse, its level count, which decides a
-    /// storage slot's level views and pushed level count, whether it is held with a depth twin, its
-    /// swizzle, its address-mode map, its [`offset_base_axes`](Self::offset_base_axes), and
-    /// whether its planes are read in place ([`ycbcr_in_place`](Self::ycbcr_in_place), whose
-    /// words the slot's push field carries, not the shape). Its array length only changes the
-    /// view's subresource range, which is every layer.
+    /// storage slot's level views and pushed level count, its swizzle, its address-mode map, its
+    /// [`offset_base_axes`](Self::offset_base_axes), and whether its planes are read in place
+    /// ([`ycbcr_in_place`](Self::ycbcr_in_place), whose words the slot's push field carries, not
+    /// the shape). Its array length only changes the view's subresource range, which is every
+    /// layer.
     ///
     /// The level count is stated whatever the usage: plain Metal writes a texture made without
     /// `ShaderWrite` at every level, through every write form, as one made with it.

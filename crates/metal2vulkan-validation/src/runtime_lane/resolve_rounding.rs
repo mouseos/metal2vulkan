@@ -41,11 +41,11 @@
 //! a wider channel. The device's average resolves every one of these formats in the pass,
 //! announced where it is not measured to be Metal's, and [`the_device_resolve_rounds_as_announced`]
 //! measures it against the rules. Metal has no texture of more than 4 samples on Apple silicon, so
-//! a resolve of 8 is compared with the same rules and printed as unmeasured, never as Metal's. A device without
-//! `imageViewFormatReinterpretation` (MoltenVK) views no texel as an unsigned format of other
-//! components, so the formats only such a view reads back are printed as unread there. The runs
-//! before the runtime resolved so (at 2b41d71d) measured each driver's own
-//! average, which `DriverFact::ColorResolveAverageIsMetals` records.
+//! a resolve of 8 is compared with the same rules and printed as unmeasured, never as Metal's. A
+//! device without `imageViewFormatReinterpretation` (MoltenVK) views no texel as an unsigned format
+//! of other components, so the formats only such a view reads back are printed as unread there. The
+//! runs before the runtime resolved so (at 2b41d71d) measured each driver's own average, which
+//! `DriverFact::ColorResolveAverageIsMetals` records.
 
 use super::resolves::{lane, quiet, Lane};
 use crate::candidate::runtime_samples::{encode_through, library, shape};

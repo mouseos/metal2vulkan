@@ -189,22 +189,6 @@ recorded here.
   (`RGBA16Float` at 30% of a 1920x1080 target), and on the Iris Xe from an eighth of the reader's
   scissor covered, whatever its area, so the rule costs up to 2.1 times there (a 320x180 scissor
   covered whole over a private 1920x1080 `BGRA8Unorm` texture).
-- **A `Depth16Unorm` depth whose code the fragment stage writes is tested after the stage.** Where
-  the device's conversion is not measured to store Metal's code
-  (`DriverDeviation::MetalDepth16Stores`, or `MetalDepth16BiasedStores` for a biased draw), a
-  single-sampled draw writes each depth as Metal's code from its fragment stage
-  (`ShaderUnormDepth`), so a fragment the depth hides still runs it. A bias of a known side
-  declares it (`DepthGreater` or `DepthLess`) and the device may test first; an unbiased draw and
-  a bias whose side a triangle's slope decides keep the cost. On the Iris Xe 16 full-screen layers
-  drawn front to back under a constant bias took 9.42 ms of GPU time with no side declared and
-  1.85 ms with one, against 1.46 ms unbiased through the device's conversion
-  (`runtime_lane::unorm_depth_bias`).
-- **A stored negative or NaN depth is tested by its magnitude.** A switched-on single-sample
-  `Depth32Float` texture's pass that loads its depth takes two copies through a scratch buffer and
-  a dispatch over the render area before it, and the same after it where it writes the depth; a
-  sign strip (two copies and a dispatch, or a draw per layer when multisampled) follows a pass with
-  depth writes where no stand-in runs (`texture/signed_depth.rs`). A texture never switched on pays
-  a flag read per pass.
 - **A texture over a no-copy buffer's host pages, or over a host-visible buffer longer than 32
   MiB, that renders or writes (or whose class's check has not passed, or whose pitch no image
   takes, or under `HostPageTexturePolicy::Shadow`), and a texture over a buffer of the runtime's
@@ -659,24 +643,6 @@ driver's. Each is open work.
   (`render/executions.rs`). In an instance that holds the attachment in the feedback loop layout,
   those reads name `VK_IMAGE_LAYOUT_GENERAL` in their descriptors, against the layout the instance
   holds.
-- **A stored negative or NaN depth where the magnitude stand-in and the sign strip do not reach.**
-  Metal's depth test compares the stored value's magnitude (a NaN above +inf), and a pass with depth
-  writes stores every texel no fragment wrote without its sign; the runtime matches both through a
-  magnitude stand-in or a sign strip (`texture/signed_depth.rs`, docs/API.md's
-  `signed-depth-test`). Still open:
-  - a multisampled or `Depth32Float_Stencil8` target's test, which compares a negative value or a
-    NaN as it is, and a pass with depth writes on a device that makes no strip for it, which keeps
-    the signs: announced (`signed-depth-test`); its resolve in such a pass resolves the samples
-    before the strip, unmeasured on Metal;
-  - a merge that keeps a stored NaN where a draw wrote exactly +inf over it, and a denormal at
-    exactly 2^-126 where the device's test flushes one: announced (`signed-depth-test`,
-    `depth-denormals`);
-  - a pass that loads the depth through another image, and one encoded before the switching write
-    in another command buffer uncommitted then: announced (`signed-depth-test`);
-  - a NaN clear depth where the device writes no `0x7fc00000` into the depth before the pass:
-    cleared to 1.0, announced (`signed-depth-test`);
-  - a device that may clamp a depth outside `[0, 1]` (ANV): announced as `restricted-depth-upload`;
-    a form that keeps the value in a 32-bit float colour image beside the stand-in is not built.
 - **Compute private memory past a device's Function storage is refused.** A kernel, object or mesh
   function whose private memory (its `alloca`s, a call stack among them, and constants held as
   `Private` variables) passes what the device holds is refused (`Unsupported{PrivateMemory}`, or

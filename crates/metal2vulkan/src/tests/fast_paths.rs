@@ -75,11 +75,10 @@ fn choices() -> Vec<Choice> {
         vertex_normalized: _,
         nan_and_min_max: _,
         rounding_order: _,
-        // The runtime's: where a multisampled `Depth32Float` texture's texels are held, the
-        // texels of a carried texture's decoded twin, a heap's compressed
-        // texture's image, when the host sees a command buffer complete, how a batch begins after the
-        // earlier ones of its queue, where a render encoder's calls are lowered, and what holds a
-        // sampled texture over host pages.
+        // The runtime's: the texels of a carried texture's decoded twin, a heap's compressed
+        // texture's image, when the host sees a command buffer complete, how a batch begins after
+        // the earlier ones of its queue, where a render encoder's calls are lowered, and what holds
+        // a sampled texture over host pages.
         decoded_texels: _,
         heap_compression: _,
         completion: _,

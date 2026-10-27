@@ -716,10 +716,10 @@ impl Case for TextureFills {
         let mut allowances = Vec::new();
         if matches!(self.raw, 252 | 260) {
             // A 32-bit float depth's patterns may be depth outside [0, 1]
-            // (`Depth32Float_Stencil8`'s are). Where the device's uploads announce that it may store such a value clamped,
-            // the format's bytes are not Metal's to match: the lane skips the format there, and
-            // here the digest goes unchecked, named, counted and reported, with that notice as the
-            // justification.
+            // (`Depth32Float_Stencil8`'s are). Where the device's uploads announce that it may
+            // store such a value clamped, the format's bytes are not Metal's to match: the lane
+            // skips the format there, and here the digest goes unchecked, named, counted and
+            // reported, with that notice as the justification.
             allowances.push(Allowance::new(
                 format!("case/{}", site(self.raw)),
                 Loosening::Unchecked,

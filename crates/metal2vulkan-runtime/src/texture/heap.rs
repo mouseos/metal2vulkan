@@ -16,24 +16,23 @@
 //!   The texture is held to that answer in one of two ways ([`images_fit`]). Where the image the
 //!   runtime makes of the descriptor (the plan `new_texture` makes, with the usage the runtime
 //!   adds itself, `with_free_usage`) asks no more bytes and no coarser alignment, the image is
-//!   bound at the texture's offset of the heap's memory. Its footprint is the image's own: a heap's image takes **no** `bufferImageGranularity` padding, because the
-//!   heap's own buffer covers its memory from end to end, so no padding can put the image in a
-//!   granularity page no buffer lies in and the padding would only widen the answer
-//!   (`texture::ImagePlacement::in_heap`; every NVIDIA profile in `validation/profiles` states a
-//!   granularity of 1024 bytes where Metal answers 128). Where the driver answers a compressed
-//!   image's size short of its compression data (ANV on Intel's Xe-LP GPUs) the footprint still
-//!   takes whole 256-byte chunks of the aux map's, so no other resource lies in a chunk the image
-//!   writes. Where the images ask more, the texture is a shadow of its bytes with its image in
-//!   memory of its own (Metal's tiles where they serve, else rows) and takes Metal's answer all
-//!   the same; where no shadow serves, the answer is the larger of the two and the device
-//!   announces `heap-texture-larger-than-metal` once (a measured route's answer is refused
-//!   instead, `NotImplemented(HeapTextureMemory)`: its bytes are no layout the device's image
-//!   holds).
-//!   The usage changes Metal's answer only through whether Metal compresses the texture
-//!   (`heap_tiled::metal_keeps_uncompressed`, a colour texture of `ShaderWrite`, `PixelFormatView`
-//!   or `ShaderAtomic` usage stays uncompressed, a depth or stencil texture of no usage does), and
-//!   the runtime plans an image Metal keeps uncompressed so its driver keeps it so (`image_plan`),
-//!   so the image is no larger than Metal's answer.
+//!   bound at the texture's offset of the heap's memory. Its footprint is the image's own: a heap's
+//!   image takes **no** `bufferImageGranularity` padding, because the heap's own buffer covers its
+//!   memory from end to end, so no padding can put the image in a granularity page no buffer lies
+//!   in and the padding would only widen the answer (`texture::ImagePlacement::in_heap`; every
+//!   NVIDIA profile in `validation/profiles` states a granularity of 1024 bytes where Metal answers
+//!   128). Where the driver answers a compressed image's size short of its compression data (ANV on
+//!   Intel's Xe-LP GPUs) the footprint still takes whole 256-byte chunks of the aux map's, so no
+//!   other resource lies in a chunk the image writes. Where the images ask more, the texture is a
+//!   shadow of its bytes with its image in memory of its own (Metal's tiles where they serve, else
+//!   rows) and takes Metal's answer all the same; where no shadow serves, the answer is the larger
+//!   of the two and the device announces `heap-texture-larger-than-metal` once (a measured route's
+//!   answer is refused instead, `NotImplemented(HeapTextureMemory)`: its bytes are no layout the
+//!   device's image holds). The usage changes Metal's answer only through whether Metal compresses
+//!   the texture (`heap_tiled::metal_keeps_uncompressed`, a colour texture of `ShaderWrite`,
+//!   `PixelFormatView` or `ShaderAtomic` usage stays uncompressed, a depth or stencil texture of no
+//!   usage does), and the runtime plans an image Metal keeps uncompressed so its driver keeps it so
+//!   (`image_plan`), so the image is no larger than Metal's answer.
 //! - **Multisample textures over host pages**, and in any heap whose memory its optimal image does
 //!   not take where the device's linear images cannot hold it (an NVIDIA GPU's `Shared` heap; a
 //!   depth texture of a `Shared` heap on MoltenVK, whose optimal depth images take no host-visible
@@ -1269,9 +1268,10 @@ pub(crate) fn held_to_metal(
     }
 }
 
-/// Whether a heap texture whose image takes `route` is held to the heap's base at all ([`check_heap_base`]): an image of it binds into the heap's own
-/// memory, which starts at a multiple of [`HEAP_BASE_ALIGNMENT`] alone, so an image whose
-/// alignment passes that base has no offset there to bind at.
+/// Whether a heap texture whose image takes `route` is held to the heap's base at all
+/// ([`check_heap_base`]): an image of it binds into the heap's own memory, which starts at a
+/// multiple of [`HEAP_BASE_ALIGNMENT`] alone, so an image whose alignment passes that base has no
+/// offset there to bind at.
 ///
 /// A texture whose every image lies in memory of its own ([`AliasRoute::in_own_memory`]) binds
 /// nothing to the heap's memory: the heap's bytes hold the texture's own layout there and the
@@ -1283,9 +1283,10 @@ fn holds_heap_base(route: AliasRoute) -> bool {
     !route.in_own_memory()
 }
 
-/// Whether a heap texture whose image takes `route`, and whose answer is of alignment `align`, lies at a multiple of that alignment wherever a heap's
-/// memory starts: refused past [`HEAP_BASE_ALIGNMENT`] (`RuntimeGap::HeapTextureAlignment`) where
-/// an image of it binds into the heap's memory and nowhere else ([`holds_heap_base`]).
+/// Whether a heap texture whose image takes `route`, and whose answer is of alignment `align`, lies
+/// at a multiple of that alignment wherever a heap's memory starts: refused past
+/// [`HEAP_BASE_ALIGNMENT`] (`RuntimeGap::HeapTextureAlignment`) where an image of it binds into the
+/// heap's memory and nowhere else ([`holds_heap_base`]).
 pub(crate) fn check_heap_base(route: AliasRoute, align: u64) -> Result<(), Error> {
     if holds_heap_base(route) && align > HEAP_BASE_ALIGNMENT {
         return Err(Error::NotImplemented(RuntimeGap::HeapTextureAlignment {
@@ -1435,12 +1436,12 @@ impl Device {
     /// `descriptor` takes of a heap on this device (the module docs). Metal's answer wherever the
     /// runtime models it, so a program may size a heap and place its resources by Metal's
     /// numbers; the device's image's own footprint, with whole chunks of compression data where
-    /// the driver writes them past an image's size, where the model has none or no shadow holds the texture to Metal's answer
-    /// (then announced `heap-texture-larger-than-metal`). The image of a descriptor with
-    /// `allow_gpu_optimized_contents` off is one of `PixelFormatView` usage, as Metal lays out a
-    /// color texture with it off (the module docs). A texture of the descriptor fits at any
-    /// multiple of the alignment in any heap with room. A texture buffer takes Metal's answer: its
-    /// row of texels, at a multiple of 16 bytes.
+    /// the driver writes them past an image's size, where the model has none or no shadow holds the
+    /// texture to Metal's answer (then announced `heap-texture-larger-than-metal`). The image of a
+    /// descriptor with `allow_gpu_optimized_contents` off is one of `PixelFormatView` usage, as
+    /// Metal lays out a color texture with it off (the module docs). A texture of the descriptor
+    /// fits at any multiple of the alignment in any heap with room. A texture buffer takes Metal's
+    /// answer: its row of texels, at a multiple of 16 bytes.
     ///
     /// A format the translator holds **no image** of, whose footprint its own structure decides
     /// (`metal::format::footprint`: ASTC's 4x2 and 8x4 footprints, `BGRA4Unorm`,
@@ -2324,7 +2325,8 @@ impl Device {
     /// image to and from them (one sample) and its planes fit the answered size, as `p`'s shadow
     /// already is. An optimal image bound to imported host memory is no route: drivers lay it apart
     /// from the memory (MoltenVK's lies in a texture of its own, its imported memory being a
-    /// buffer), or ask a dedicated allocation (RADV). Elsewhere `NotImplemented(HeapTextureMemory)`.
+    /// buffer), or ask a dedicated allocation (RADV). Elsewhere
+    /// `NotImplemented(HeapTextureMemory)`.
     ///
     /// Over pages imported as dma-bufs (`dma_buf.rs`, where the device refused their pointer),
     /// where the linear image would be: an image of the driver's `DRM_FORMAT_MOD_LINEAR` layout at
@@ -2883,7 +2885,6 @@ impl Device {
             kept_outside: AtomicBool::new(false),
             host_shadow: Mutex::default(),
             between: OnceLock::new(),
-            signed_depth: AtomicBool::new(false),
             detached: Mutex::new(None),
             first_move: Mutex::new(None),
             host_copies: false,
@@ -2925,7 +2926,6 @@ impl Device {
             kept_outside: AtomicBool::new(false),
             host_shadow: Mutex::default(),
             between: OnceLock::new(),
-            signed_depth: AtomicBool::new(false),
             detached: Mutex::new(Some(DetachedImage {
                 stand_in,
                 own: None,

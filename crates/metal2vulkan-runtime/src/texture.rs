@@ -171,7 +171,6 @@ pub(super) mod requirements;
 #[cfg(unix)]
 mod rotation;
 mod shared;
-pub(super) mod signed_depth;
 mod staging_copy;
 pub(super) mod stand_in;
 pub(super) mod storage_form;
@@ -572,13 +571,6 @@ struct Image {
     /// (`two_planes/buffer_rows.rs`): plane 0 of each slice laid out as Metal lays it, made at
     /// the first such write.
     between: OnceLock<Buffer>,
-    /// Its 32-bit float depth may hold a value whose magnitude stand-in is not itself (a negative
-    /// value, a NaN, or, where the device's depth test compares a denormal as zero, a denormal),
-    /// which a write that may store one set: a pass that loads it renders over its magnitude
-    /// stand-in, or its words are stripped of their signs after a pass with depth writes whose
-    /// stores the device's pass leaves signed (`signed_depth.rs`). Set once, never cleared; only
-    /// on an image with a form ([`Texture::magnitude_form`]).
-    signed_depth: AtomicBool,
     /// While the bytes of its texture are detached (`detach.rs`): the stand-in it presents
     /// (`stand_in.rs`), whose read image is its `VkImage` meanwhile, and, for an image in memory of
     /// its own, its own image and views, which a reattach swaps back. Locked under `views`.
@@ -1487,11 +1479,12 @@ fn image_error(call: &'static str, refusal: ImageRefusal) -> Error {
     }
 }
 
-/// `plan`, the image of a texture of `layout` and Metal `usage`, with the storage usage a texture without `ShaderWrite` or `ShaderAtomic` lacks, and the
-/// sampled usage one without `ShaderRead` lacks, each where `take` takes it: the candidate is the
-/// image the texture with the usage would have, offered (`take(plan, candidate)`, which answers
-/// the plan to go on with) only where it keeps the image's format and has every usage `plan` has.
-/// Plain Metal writes and reads such a texture (`Device::with_undeclared_usage`).
+/// `plan`, the image of a texture of `layout` and Metal `usage`, with the storage usage a texture
+/// without `ShaderWrite` or `ShaderAtomic` lacks, and the sampled usage one without `ShaderRead`
+/// lacks, each where `take` takes it: the candidate is the image the texture with the usage would
+/// have, offered (`take(plan, candidate)`, which answers the plan to go on with) only where it
+/// keeps the image's format and has every usage `plan` has. Plain Metal writes and reads such a
+/// texture (`Device::with_undeclared_usage`).
 fn undeclared_usage(
     mut plan: ImagePlan,
     layout: &TextureLayout,
@@ -1875,7 +1868,6 @@ impl Device {
             kept_outside: AtomicBool::new(false),
             host_shadow: Mutex::default(),
             between: OnceLock::new(),
-            signed_depth: AtomicBool::new(false),
             detached: Mutex::new(None),
             first_move: Mutex::new(Some(first)),
             host_copies: false,
@@ -2003,7 +1995,6 @@ impl Device {
             kept_outside: AtomicBool::new(false),
             host_shadow: Mutex::default(),
             between: OnceLock::new(),
-            signed_depth: AtomicBool::new(false),
             detached: Mutex::new(None),
             first_move: Mutex::new(Some(first)),
             host_copies: false,
@@ -2037,12 +2028,13 @@ impl Device {
     }
 
     /// `plan`, the image of a texture of `layout` and Metal `usage`, with the storage usage a
-    /// texture without `ShaderWrite` or `ShaderAtomic` lacks, and the sampled usage one without `ShaderRead` lacks, each where it costs the image
-    /// nothing (`if_free`: the same memory size and alignment): plain Metal writes and reads such
-    /// a texture (an M4 under macOS 27.0.1; its validation stops them), and a valid program's
-    /// texture keeps its compression. The candidate is the image the texture with the usage would
-    /// have, taken only where it keeps the image's format; elsewhere a binding that needs
-    /// the usage is the runtime's gap (`Feature::UndeclaredTextureUsage`, `binding_view`).
+    /// texture without `ShaderWrite` or `ShaderAtomic` lacks, and the sampled usage one without
+    /// `ShaderRead` lacks, each where it costs the image nothing (`if_free`: the same memory size
+    /// and alignment): plain Metal writes and reads such a texture (an M4 under macOS 27.0.1; its
+    /// validation stops them), and a valid program's texture keeps its compression. The candidate
+    /// is the image the texture with the usage would have, taken only where it keeps the image's
+    /// format; elsewhere a binding that needs the usage is the runtime's gap
+    /// (`Feature::UndeclaredTextureUsage`, `binding_view`).
     fn with_undeclared_usage(
         &self,
         plan: ImagePlan,
@@ -2668,7 +2660,6 @@ impl Device {
             kept_outside: AtomicBool::new(false),
             host_shadow: Mutex::default(),
             between: OnceLock::new(),
-            signed_depth: AtomicBool::new(false),
             detached: Mutex::new(None),
             first_move: Mutex::new(None),
             host_copies: false,
@@ -2716,7 +2707,6 @@ impl Device {
             kept_outside: AtomicBool::new(false),
             host_shadow: Mutex::default(),
             between: OnceLock::new(),
-            signed_depth: AtomicBool::new(false),
             detached: Mutex::new(None),
             first_move: Mutex::new(None),
             host_copies: false,
@@ -3120,7 +3110,6 @@ impl Device {
             kept_outside: AtomicBool::new(false),
             host_shadow: Mutex::default(),
             between: OnceLock::new(),
-            signed_depth: AtomicBool::new(false),
             detached: Mutex::new(None),
             first_move: Mutex::new(None),
             host_copies,
@@ -3597,8 +3586,8 @@ impl Heap {
     /// refuses); a texture whose unmapped texels the runtime cannot zero: a single-sampled one of a
     /// format the device copies nothing into, a multisampled one of a format it does not clear and
     /// render (`NotImplemented(SparseTileMaps)`), or past its framebuffers
-    /// (`Unsupported(Feature::RenderTargetSize)`); a two-plane extended-range format (`RGB10A8_2P_XR10` and
-    /// its twin, `NotImplemented(Format)`).
+    /// (`Unsupported(Feature::RenderTargetSize)`); a two-plane extended-range format
+    /// (`RGB10A8_2P_XR10` and its twin, `NotImplemented(Format)`).
     ///
     /// Refused for a placement heap, whose textures take an offset (`Invalid`, as for its
     /// buffers).
@@ -4398,16 +4387,13 @@ impl Texture {
     /// `VK_EXT_depth_range_unrestricted` enabled whose driver is not measured to keep a value
     /// outside `[0, 1]` there (`ImageFacts::depth_clamps`), `restricted-depth-upload`. On any
     /// other, an upload that may store a negative value or a NaN (`signed`) in a render target's
-    /// depth, which a depth test reads, switches it on to render over its magnitude stand-in, so
-    /// the device's test answers as Metal's, which compares the value's magnitude
-    /// (`texture/signed_depth.rs`; `encoding` where a command buffer of the program's records the
-    /// upload); a target that takes no stand-in announces `signed-depth-test`.
+    /// depth, which a depth test reads, `signed-depth-test`
+    /// ([`degrade_signed_depth`](Self::degrade_signed_depth)).
     pub(super) fn degrade_depth_upload(
         &self,
         call: &'static str,
         aspect: ImageAspectFlags,
         signed: bool,
-        encoding: bool,
     ) {
         let Ok(image) = self.image() else {
             return;
@@ -4432,84 +4418,91 @@ impl Texture {
                 (format!("a {format:?} texture"), why)
             });
         } else if signed {
-            self.degrade_signed_depth(call, encoding);
+            self.degrade_signed_depth(call);
         }
     }
 
-    /// Switch the texture's depth on for `call`'s write into it, which may store a negative value
-    /// or a NaN, on a device that keeps such a value in a depth image (`texture/signed_depth.rs`;
-    /// `encoding` where a command buffer of the program's records the write): a render target's
-    /// 32-bit float depth, which a depth test reads and a pass with depth writes stores. One whose
-    /// device's depth test then answers as Metal's (it takes the magnitude stand-in, or the
-    /// device's test is Metal's own, `DriverFact::DepthTestComparesMagnitudes`) announces
-    /// nothing; one that takes no stand-in (multisampled, or a combined depth/stencil format)
-    /// announces `signed-depth-test`, as the device's test compares the value as it is, where
-    /// Metal's compares its magnitude, and names whether its passes' stores are Metal's (the
-    /// strip) or keep the sign.
-    pub(super) fn degrade_signed_depth(&self, call: &'static str, encoding: bool) {
-        let Ok(image) = self.image() else {
+    /// Announce `signed-depth-test` for `call`'s write into the texture, which may store a negative
+    /// value or a NaN, on a device that keeps such a value in a depth image: a render target's
+    /// 32-bit float depth, which a depth test reads and a pass with depth writes stores. Metal's
+    /// test compares the stored value's magnitude, and Metal's pass with depth writes stores the
+    /// words no fragment wrote without their signs; the device's test compares the value as it
+    /// is, and its pass keeps every bit. Not where the device's depth test and pass are Metal's
+    /// own (`DriverFact::DepthTestComparesMagnitudes`: MoltenVK), where only a pass that sets a
+    /// state with depth writes but draws under none differs
+    /// ([`degrade_kept_signs`](Self::degrade_kept_signs)).
+    pub(super) fn degrade_signed_depth(&self, call: &'static str) {
+        let Some(facts) = self.keeps_signed_depth() else {
             return;
         };
+        if facts.test_magnitudes {
+            return;
+        }
+        let format = self.pixel_format();
+        self.device().degrade(Degradation::SignedDepthTest, || {
+            let why = format!(
+                "{call} may store a negative or NaN depth in a render target's depth image, which \
+                 the device's depth test compares as it is, where Metal's compares its magnitude, \
+                 and which a pass with depth writes keeps with its sign, where Metal stores it \
+                 without"
+            );
+            (format!("a {format:?} texture"), why)
+        });
+    }
+
+    /// Announce `signed-depth-test` for a pass that loads and stores the texture's depth and sets
+    /// a depth/stencil state with depth writes but draws under none, on a device whose depth test
+    /// and pass are Metal's own (`DriverFact::DepthTestComparesMagnitudes`: MoltenVK, which hands
+    /// the state to the GPU's pass only with a draw): the pass keeps the signs of a negative or
+    /// NaN depth, where Metal's stores the words without them. Measured through MoltenVK on the
+    /// M3 Max: an indirect draw whose arguments draw no instances hands it the state.
+    pub(crate) fn degrade_kept_signs(&self) {
+        let Some(facts) = self.keeps_signed_depth() else {
+            return;
+        };
+        if !facts.test_magnitudes {
+            return;
+        }
+        let format = self.pixel_format();
+        self.device().degrade(Degradation::SignedDepthTest, || {
+            let why = "a pass that loads and stores a render target's depth, which may hold a \
+                       negative or NaN value, sets a depth/stencil state with depth writes but \
+                       draws under none, so it keeps the value's sign, where Metal stores it \
+                       without"
+                .to_owned();
+            (format!("a {format:?} texture"), why)
+        });
+    }
+
+    /// The facts of the device's depth images where the texture is a render target whose image
+    /// holds a 32-bit float depth that keeps a negative value or a NaN (the device does not clamp
+    /// such an upload, `ImageFacts::depth_clamps`); `None` for any other texture.
+    fn keeps_signed_depth(&self) -> Option<DepthImageFacts> {
+        let image = self.image().ok()?;
         let float_depth = matches!(
             image.plan().format,
             Format::D32_SFLOAT | Format::D32_SFLOAT_S8_UINT
         );
-        if !float_depth
-            || !self.usage().contains(TextureUsage::RENDER_TARGET)
-            || self.switch_on_signed_depth(call, encoding)
-        {
-            return;
+        if !float_depth || !self.usage().contains(TextureUsage::RENDER_TARGET) {
+            return None;
         }
         let device = self.device();
-        let profile = device.compile_device().profile();
-        let facts = device.shared().textures.facts(profile);
-        if facts.depth_clamps() {
-            return;
-        }
-        let stripped = self.magnitude_form().is_some();
-        let format = self.pixel_format();
-        device.degrade(Degradation::SignedDepthTest, || {
-            let why = match (facts.depth_images.test_magnitudes, stripped) {
-                (false, true) => format!(
-                    "{call} may store a negative or NaN depth in a render target's depth image, \
-                     which the device's depth test compares as it is, where Metal's compares its \
-                     magnitude: a multisampled or combined depth/stencil target renders over no \
-                     magnitude stand-in (a pass with depth writes stores it without its sign, as \
-                     Metal's)"
-                ),
-                (false, false) => format!(
-                    "{call} may store a negative or NaN depth in a render target's depth image, \
-                     which the device's depth test compares as it is, where Metal's compares its \
-                     magnitude, and which a pass with depth writes keeps with its sign, where \
-                     Metal stores it without"
-                ),
-                (true, _) => format!(
-                    "{call} may store a negative or NaN depth in a render target's depth image, \
-                     which a pass with depth writes that draws under none keeps with its sign, \
-                     where Metal stores it without"
-                ),
-            };
-            (format!("a {format:?} texture"), why)
-        });
+        let facts = device
+            .shared()
+            .textures
+            .facts(device.compile_device().profile());
+        (!facts.depth_clamps()).then_some(facts.depth_images)
     }
 
     /// Announce `depth-denormals` for `call`'s write into `aspect` of the texture's image that may
     /// store a denormal (`on_host`: by a host copy): the 32-bit float depth of a depth image, on
     /// a device whose driver may store it or test it otherwise than Metal's
     /// ([`ImageFacts::denormal_loss`]).
-    /// Where the driver stores it and only its depth test compares it otherwise, a render target
-    /// that takes a magnitude stand-in is switched on (`texture/signed_depth.rs`, `encoding` as
-    /// [`degrade_depth_upload`](Self::degrade_depth_upload) takes it): its passes test the
-    /// smallest normal in a denormal's place, Metal's answer but for a fragment at exactly 2^-126,
-    /// which the notice names. A host copy's denormal on a driver whose GPU copies store one as a
-    /// zero switches it on too, but the stand-in's copies read it as a zero: the notice names the
-    /// loss.
     pub(super) fn degrade_depth_denormals(
         &self,
         call: &'static str,
         aspect: ImageAspectFlags,
         on_host: bool,
-        encoding: bool,
     ) {
         let Ok(image) = self.image() else {
             return;
@@ -4527,24 +4520,9 @@ impl Texture {
         let Some(loss) = facts.denormal_loss(on_host) else {
             return;
         };
-        let stored = on_host || facts.depth_images.denormals;
-        let switched = stored
-            && self.usage().contains(TextureUsage::RENDER_TARGET)
-            && self.switch_on_signed_depth(call, encoding)
-            && self.takes_magnitude_stand_in();
-        // The stand-in's copies keep a denormal only where the device's GPU copies do.
-        let tested = switched && facts.depth_images.denormals;
         device.degrade(Degradation::DepthDenormals, || {
             let format = self.pixel_format();
-            let why = match tested {
-                true => format!(
-                    "{call} may store a denormal depth in a render target, whose passes test it \
-                     over the smallest normal, as the device's depth test compares a stored \
-                     denormal as zero: a fragment at exactly 2^-126 passes `Equal` and fails \
-                     `Greater` against it, where Metal's fails and passes"
-                ),
-                false => format!("{call} may store a denormal depth: {loss}"),
-            };
+            let why = format!("{call} may store a denormal depth: {loss}");
             (format!("a {format:?} texture"), why)
         });
     }
@@ -5434,19 +5412,7 @@ impl Texture {
         // Bytes that hold a negative or NaN depth, which a depth test compares otherwise.
         let signed = image_region.aspect == ImageAspectFlags::DEPTH
             && host.holds_negative_or_nan(bytes.slice());
-        self.degrade_depth_upload(CALL, image_region.aspect, signed, false);
-        // Bytes whose magnitude stand-in is not themselves (-0, a negative denormal, and, where the
-        // device's depth test compares a denormal as zero, a positive one) switch a render
-        // target's depth on too (`texture/signed_depth.rs`): none of them is announced as a sign.
-        if image_region.aspect == ImageAspectFlags::DEPTH
-            && !signed
-            && self.usage().contains(TextureUsage::RENDER_TARGET)
-        {
-            let flush = signed_depth::test_flushes_denormals(self.device());
-            if host.holds_unlike_its_stand_in(bytes.slice(), flush) {
-                self.switch_on_signed_depth(CALL, false);
-            }
-        }
+        self.degrade_depth_upload(CALL, image_region.aspect, signed);
         // Bytes that hold a denormal depth, announced as the copy below stores them.
         let denormal =
             image_region.aspect == ImageAspectFlags::DEPTH && host.holds_denormal(bytes.slice());
@@ -5469,13 +5435,13 @@ impl Texture {
             };
             if truth.host_write(copy, &packed)? {
                 if denormal {
-                    self.degrade_depth_denormals(CALL, image_region.aspect, true, false);
+                    self.degrade_depth_denormals(CALL, image_region.aspect, true);
                 }
                 return truth.decode_written(&image_region, || packed.into_owned());
             }
         }
         if denormal {
-            self.degrade_depth_denormals(CALL, image_region.aspect, false, false);
+            self.degrade_depth_denormals(CALL, image_region.aspect, false);
         }
         // Packed into the staging buffer from the caller's bytes.
         if truth.takes_staging_copies()

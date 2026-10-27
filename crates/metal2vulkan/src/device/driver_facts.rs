@@ -1181,12 +1181,10 @@ pub enum DriverFact {
     /// own (MoltenVK) it holds by construction: the pass's depth test is Metal's test of a
     /// `Depth32Float` texture on that GPU, which gives that GPU's Metal answer, and its pass
     /// stores what Metal's stores (a pass with depth writes stores each texel it leaves without
-    /// its sign) wherever a draw hands it a state with depth writes. On a driver with it no render
-    /// target's depth renders over a magnitude stand-in, a single-sample `Depth32Float` one is
-    /// stripped of its signs after a pass that sets such a state but draws under none, and a write
-    /// that may store a negative value or a NaN announces nothing (`texture/signed_depth.rs`);
-    /// elsewhere a single-sample `Depth32Float` target renders over the stand-in, and a
-    /// multisampled or combined depth/stencil one announces `signed-depth-test`.
+    /// its sign) wherever a draw hands it a state with depth writes. On a driver with it a write
+    /// that may store a negative value or a NaN in a render target's depth announces nothing, and
+    /// a pass that sets such a state but draws under none, which keeps the signs, announces
+    /// `signed-depth-test`; elsewhere such a write announces it.
     DepthTestComparesMagnitudes,
     /// The device's first sparse resource's creation (`vkCreateImage` or `vkCreateBuffer` with
     /// `SPARSE_BINDING`) waits for the work submitted before it on every queue: ANV through

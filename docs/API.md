@@ -2471,39 +2471,26 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   one), on a device whose driver stores one a write on the GPU gives it as a zero (no
   `DriverFact::DepthImageKeepsDenormals`: RADV, ANV; a host copy keeps it) or whose depth test
   compares one otherwise than Metal's (no `DriverFact::DepthTestKeepsDenormals`: every driver
-  measured but MoltenVK on an Apple M4). Where the driver stores it and only its depth test differs,
-  a single-sample `Depth32Float` render target's passes test the smallest normal in its place (the
-  magnitude stand-in of `signed-depth-test`): Metal's answer but for a fragment at exactly 2^-126,
-  which passes `Equal` and fails `Greater` against it, where Metal's fails and passes; the payload
-  says so. Cost: a denormal depth may read, sample and copy out as a zero, or the depth test may
-  compare it as zero (a positive one) or below zero (a negative one), where Metal keeps it and
-  compares a positive one above zero and a negative one not below it; a render target whose passes
-  test the smallest normal in its place differs only for a fragment at exactly 2^-126.
+  measured but MoltenVK on an Apple M4). Cost: a denormal depth may read, sample and copy out as a
+  zero, or the depth test may compare it as zero (a positive one) or below zero (a negative one),
+  where Metal keeps it and compares a positive one above zero and a negative one not below it.
 - `metal2vulkan-degrade-signed-depth-test` (precision). `SignedDepthTest`: A depth test that may
   compare a negative value or a NaN stored in the 32-bit float depth of a render target as it is, or
   a pass with depth writes that may store such a value with its sign, where Metal's test compares
   the stored value's magnitude (a NaN above +inf) and its pass with depth writes stores every texel
-  no fragment wrote without its sign. A single-sample `Depth32Float` render target a write may give
-  such a value, or whose new texture's pattern (a NaN with the sign set) a pass loads before a write
-  covered it, is switched on (`WorkCounts::signed_depth_switch_ons`): each pass that loads its depth
-  renders over a magnitude stand-in, merged back after a pass with depth writes
-  (`WorkCounts::magnitude_stand_in_passes`, `magnitude_write_backs`); other targets' signs are
-  stripped after such a pass (`WorkCounts::sign_strips`); MoltenVK's test is Metal's own
-  (`DriverFact::DepthTestComparesMagnitudes`). Announced for what that misses: a merge under a
-  draw's exact +inf, a depth loaded through another image, a switch while another command buffer is
-  uncommitted, a multisampled or `Depth32Float_Stencil8` target's test (at the write, or at the pass
-  that loads its new pattern, on a device that keeps such a value in a depth image:
-  `VK_EXT_depth_range_unrestricted` enabled, or `DriverFact::DepthImageKeepsValuesOutsideUnitRange`;
-  elsewhere `restricted-depth-upload` is announced), a strip the device does not make, and a NaN
-  clear depth the device does not write before the pass. Cost: a depth test against the stored
-  value, or the value a pass with depth writes stores, can differ from Metal's in the pass or target
-  named: the device compares
-  a negative value below zero and a NaN by its own rule and keeps the value's sign, or a pass's
-  merge keeps a stored NaN where a draw wrote +inf over it, where Metal compares the value's
-  magnitude, orders a NaN above every value, stores the value without its sign and stores the
-  draw's; or a NaN clear depth is stored and tested as 1.0, where Metal stores `0x7fc00000`. A
-  texture never switched on renders in place; a switched-on texture's loading pass adds two copies
-  and a dispatch over its render area before it, and the same after it where it writes the depth.
+  no fragment wrote without its sign. Announced at a write that may give a render target's depth
+  such a value, or at the pass that loads a new texture's pattern (a NaN with the sign set) before a
+  write covered it, on a device that keeps such a value in a depth image:
+  `VK_EXT_depth_range_unrestricted` enabled, or `DriverFact::DepthImageKeepsValuesOutsideUnitRange`
+  (elsewhere `restricted-depth-upload` is announced). MoltenVK's test is Metal's own
+  (`DriverFact::DepthTestComparesMagnitudes`): there it is announced at a pass that loads and stores
+  the depth and sets a state with depth writes but draws under none, whose pass keeps the signs.
+  Also announced for a NaN clear depth the device does not write before the pass. Cost: a depth test
+  against the stored value, or the value a pass with depth writes stores, can differ from Metal's in
+  the pass or target named: the device compares a negative value below zero and a NaN by its own
+  rule and keeps the value's sign, where Metal compares the value's magnitude, orders a NaN above
+  every value and stores the value without its sign; or a NaN clear depth is stored and tested as
+  1.0, where Metal stores `0x7fc00000`.
 - `metal2vulkan-degrade-first-sparse-resource-wait` (performance). `FirstSparseResourceWait`: The
   device's first sparse texture made (`Heap::new_texture` in a sparse heap) on a device whose
   driver's first sparse resource waits for the work submitted before it on every queue

@@ -656,8 +656,6 @@ surface! {
         fn shadow_merge_kept_image_module;
         struct ShadowMergeImageModule N;
         enum ShadowMergeRead E;
-        fn depth_magnitude_module;
-        struct DepthMagnitudeModule N;
         fn unused_bits_module;
         struct UnusedBitsModule N;
         fn extended_shadow_module;

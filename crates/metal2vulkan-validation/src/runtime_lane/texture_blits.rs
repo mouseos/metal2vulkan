@@ -1,11 +1,11 @@
 //! Device tests of the blit encoder's texture commands on the device the cfg selects, under the
 //! validation layer: copies between buffers and textures (on the layouts Vulkan states and on the
 //! ones that go through a scratch buffer) and between textures, Metal's refusals, 32-bit float
-//! depth outside `[0, 1]` uploaded as Metal holds it with the form each device stores it in printed,
-//! what each driver's depth images keep of the `float`s
-//! Metal's hold, against its driver facts, and `generate_mipmaps` with each format's verdict
-//! printed.
+//! depth outside `[0, 1]` uploaded as Metal holds it with the form each device stores it in
+//! printed, what each driver's depth images keep of the `float`s Metal's hold, against its driver
+//! facts, and `generate_mipmaps` with each format's verdict printed.
 
+use super::degrade_notices::signs_depth_tests;
 use super::degrade_notices::{assert_made_once, assert_once, forced, loses_depth_denormals};
 use super::degrade_notices::{decodes_blocks_its_way, shared_in_system_memory};
 use super::degrade_notices::{twins_blocks, twins_carried};
@@ -1202,12 +1202,14 @@ pub(super) const UPLOADS: [Degradation; 1] = [Degradation::RestrictedDepthUpload
 ///
 /// A depth image, a read-only texture's and a render target's alike, keeps each value where the
 /// device enabled `VK_EXT_depth_range_unrestricted` or its driver is measured to keep one without
-/// it; elsewhere Vulkan leaves such a value undefined (`VUID-vkCmdCopyBufferToImage-pRegions-07931`)
-/// and a device keeps it or stores it clamped to `[0, 1]`, which its first upload announces once
-/// ([`UPLOADS`]): each value reads back as one of the two, and the form the device took is
-/// printed; where it keeps them, the upload of a negative value into a render target switches its
-/// depth on to render a pass that loads it over its magnitude stand-in (`texture/signed_depth.rs`),
-/// unannounced. A copy between two depth images moves the source's words.
+/// it; elsewhere Vulkan leaves such a value undefined
+/// (`VUID-vkCmdCopyBufferToImage-pRegions-07931`) and a device keeps it or stores it clamped to
+/// `[0, 1]`, which its first upload announces once ([`UPLOADS`]): each value reads back as one of
+/// the two, and the form the device took is printed; where it keeps them, the upload of a negative
+/// value into a render target, whose depth a test reads, announces `signed-depth-test` where the
+/// device's depth test compares the value as it is (`degrade_notices::signs_depth_tests`). A copy
+/// between two depth images moves the source's words, and a copy into a render target announces the
+/// same.
 #[test]
 fn depth_outside_the_unit_range_uploads_as_metal_holds_it() {
     const VALUES: [f32; 4] = [-0.5, 2.0, 1000.0, 0.25];
@@ -1272,7 +1274,8 @@ fn depth_outside_the_unit_range_uploads_as_metal_holds_it() {
         }
         held.replace_region(Region::new_2d(0, 0, 2, 2), 0, 0, &words, 8, 0)
             .unwrap();
-        assert_once(&messages.take_notices(), &[]);
+        let signed = forced(&[(Degradation::SignedDepthTest, signs_depth_tests(&device))]);
+        assert_made_once(&messages, &[], &signed);
         let source = device.new_buffer(16, ResourceOptions::shared()).unwrap();
         with_bytes(&source, |bytes| bytes.copy_from_slice(&words));
         let command_buffer = queue.command_buffer().unwrap();

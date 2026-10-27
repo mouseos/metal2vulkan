@@ -14,11 +14,12 @@
 //! to resolve as Metal does (`DriverFact::ColorResolveAverageIsMetals`), and elsewhere within the
 //! bound `device-rounded-resolve` states: a unorm channel within one code (an 8-bit one within
 //! two, an sRGB channel's bound), a half within one unit (one half ulp), a 32-bit float's
-//! difference printed and not bounded. A resolve that differs is printed as a near-equivalent. Depth and stencil resolves pick one sample, which Vulkan states exactly. What
-//! Metal's validation stops, the runtime refuses typed, apart from a color attachment's resolve
-//! that names no texture or a texture under a store action that does not resolve, which resolves
-//! nothing and leaves that texture untouched, and a multisampled color attachment's resolve into
-//! its format's sRGB twin, which resolves in the resolve texture's encoding, as plain Metal's.
+//! difference printed and not bounded. A resolve that differs is printed as a near-equivalent.
+//! Depth and stencil resolves pick one sample, which Vulkan states exactly. What Metal's validation
+//! stops, the runtime refuses typed, apart from a color attachment's resolve that names no texture
+//! or a texture under a store action that does not resolve, which resolves nothing and leaves that
+//! texture untouched, and a multisampled color attachment's resolve into its format's sRGB twin,
+//! which resolves in the resolve texture's encoding, as plain Metal's.
 
 use super::degrade_notices::assert_once;
 use super::{

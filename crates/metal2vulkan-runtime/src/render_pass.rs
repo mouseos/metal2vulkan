@@ -20,10 +20,11 @@
 //!   `DontCare` store): one texture through a stand-in, separate depth and stencil textures through
 //!   their combined scratch image (`depth_stencil_scratch.rs`). A memoryless one, and one whose
 //!   format the device does not copy both ways, are not built (`NotImplemented(Render)`). Every
-//!   attachment has one sample count, which the pipelines drawn must have. Metal renders into the smallest attachment's
-//!   extent, further limited by a nonzero `renderTargetWidth` and `renderTargetHeight` (measured:
-//!   an 8x8 color and a 4x4 depth attachment, or an 8x8 one under a 4x4 target size, render 4x4). A
-//!   pass without attachments needs both target sizes, and rasterizes `defaultRasterSampleCount`
+//!   attachment has one sample count, which the pipelines drawn must have. Metal renders into the
+//!   smallest attachment's extent, further limited by a nonzero `renderTargetWidth` and
+//!   `renderTargetHeight` (measured: an 8x8 color and a 4x4 depth attachment, or an 8x8 one under a
+//!   4x4 target size, render 4x4). A pass without attachments needs both target sizes, and
+//!   rasterizes `defaultRasterSampleCount`
 //!   samples (0, the default, is `Invalid`, as Metal ends the process there). Past 16384 on a side
 //!   Metal makes its encoder and fails the command buffer from the pass on (measured): the encoder
 //!   records into the device's largest framebuffer within it, and the command buffer's commit runs
@@ -113,7 +114,7 @@ use super::render_values::{
 use super::resolve::{self, DepthStencilResolve, Resolve, Wanted};
 use super::sample_planes::Planes;
 use super::sample_positions::{self, Sixteenths};
-use super::texture::{signed_depth, Texture};
+use super::texture::Texture;
 use super::tile_pass::{self, TilePass, TileRefusal};
 use super::view_plan::ViewRecord;
 use super::Device;
@@ -859,13 +860,6 @@ pub(super) fn degrade_depth_clear(device: &Device, layout: &PassLayout) {
     }
     let facts = (device.shared().textures).facts(device.compile_device().profile());
     if let Some(loss) = facts.denormal_loss(false) {
-        // Where the device stores it, a later pass that loads the depth tests it over the
-        // smallest normal (`texture/signed_depth.rs`); this one tests it as the device does.
-        if facts.depth_images.denormals {
-            let own = ds.stand_in.as_ref().map_or(&ds.target, |s| &s.own);
-            own.texture
-                .switch_on_signed_depth("render_command_encoder", true);
-        }
         device.degrade(Degradation::DepthDenormals, || {
             let format = ds.target.texture.pixel_format();
             let why = format!("a pass clears its depth to the denormal {cleared:e}: {loss}");
@@ -2067,7 +2061,7 @@ fn depth_stencil(
     let written_nan = nan == Some(NanDepth::Written);
     if written_nan {
         if let Some(target) = &depth {
-            target.texture.degrade_signed_depth(call, true);
+            target.texture.degrade_signed_depth(call);
         }
     }
     let depth_load = match written_nan {
@@ -2075,14 +2069,11 @@ fn depth_stencil(
         false => d.load_action,
     };
     // A new texture's depth pattern, a NaN with the sign set, that the pass loads before a write
-    // covered it: Metal's test compares its magnitude, so the depth is switched on as a write that
-    // may store one switches it, before the pass decides its magnitude stand-in below
+    // covered it: Metal's test compares its magnitude, the device's the value as it is
     // (`fresh_unwritten.rs`).
     if let Some(target) = depth.as_ref().filter(|_| d.load_action == LoadAction::Load) {
-        if FreshUnwritten::loads_signed_depth(device, target)?
-            && !target.texture.switch_on_fresh_pattern()
-        {
-            target.texture.degrade_signed_depth("new_texture", true);
+        if FreshUnwritten::loads_signed_depth(device, target)? {
+            target.texture.degrade_signed_depth("new_texture");
         }
     }
     let clear_depth = match nan {
@@ -2173,39 +2164,13 @@ fn depth_stencil(
     // through a stand-in made for them, each aspect copied in where the pass loads it and back
     // where it stores it (`attachment_stand_in.rs`), as plain Metal renders it at them; so does
     // one without depth/stencil attachment usage.
-    // A depth that may hold a negative value or a NaN, which the pass loads, renders over its
-    // magnitude stand-in, so the device's depth test answers as Metal's
-    // (`texture/signed_depth.rs`): one flag read where the pass loads its depth.
-    let signed = depth
-        .as_ref()
-        .filter(|t| depth_load == LoadAction::Load && t.texture.renders_over_magnitude());
     let cause = match separate.is_none() {
         false => None,
         true if unattachable(&target)? => Some(Cause::Unattachable),
         true if positioned_stand_in(device, descriptor, &target)? => Some(Cause::Positions),
-        true if signed.is_some() => Some(Cause::Magnitude),
         true => None,
     };
-    // Through another image, the pass tests the depth as it is.
-    if let Some(own) = signed.filter(|_| cause != Some(Cause::Magnitude)) {
-        let through = match separate.is_some() {
-            true => "the scratch image of separate depth and stencil textures",
-            false => "a stand-in for the pass's custom sample positions",
-        };
-        signed_depth::degrade_through(device, own, through);
-    }
     let (target, stand_in) = match cause {
-        // The image its texture keeps for the queue, which the pass's copies fill first.
-        Some(Cause::Magnitude) => {
-            let queue = maker.command_queue().id();
-            let stood = attachment_stand_in::kept_backing(maker, &target, queue, true)?;
-            let own = StandIn {
-                own: target,
-                cause: Cause::Magnitude,
-                area: None,
-            };
-            (stood, Some(own))
-        }
         Some(cause) => {
             let stood = attachment_stand_in::stand_in(maker, &target, true)?;
             let own = StandIn {

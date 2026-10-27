@@ -374,19 +374,21 @@ const SNORM_MINIMUM: [PixelFormat; 6] = [
 ];
 
 /// Whether `color` is a single-sampled attachment of a signed normalized format
-/// ([`SNORM_MINIMUM`]), loaded and not discarded at the store: Metal's pass, once it draws, writes each tile a draw reaches back through the channels'
-/// values, so a minimum code (-128, or -32768) is stored as the code above it, where the device's
-/// pass keeps the bytes its draws do not write (`degrade_snorm_minimum`, which reads
-/// `DriverFact::TileStoreIsMetals`: a driver whose pass stores them as Metal's).
+/// ([`SNORM_MINIMUM`]), loaded and not discarded at the store: Metal's pass, once it draws, writes
+/// each tile a draw reaches back through the channels' values, so a minimum code (-128, or -32768)
+/// is stored as the code above it, where the device's pass keeps the bytes its draws do not write
+/// (`degrade_snorm_minimum`, which reads `DriverFact::TileStoreIsMetals`: a driver whose pass
+/// stores them as Metal's).
 pub(super) fn snorm_minimum_kept(color: &ColorTarget) -> bool {
     kept_through_store(color, |format| SNORM_MINIMUM.contains(&format))
 }
 
 /// Whether `color` is a single-sampled `RGB9E5Float` attachment, loaded and not discarded at the
-/// store: Metal's pass, once it draws, writes each tile a draw reaches back through its texels' values, so a word whose largest mantissa is below 256
-/// under an exponent above 0 (one no Metal write leaves) is stored normalized, its mantissas
-/// shifted up as its exponent steps down, where the device's pass keeps the bytes its draws do
-/// not write (`degrade_shared_exponent`, which reads `DriverFact::TileStoreIsMetals`).
+/// store: Metal's pass, once it draws, writes each tile a draw reaches back through its texels'
+/// values, so a word whose largest mantissa is below 256 under an exponent above 0 (one no Metal
+/// write leaves) is stored normalized, its mantissas shifted up as its exponent steps down, where
+/// the device's pass keeps the bytes its draws do not write (`degrade_shared_exponent`, which reads
+/// `DriverFact::TileStoreIsMetals`).
 pub(super) fn shared_exponent_kept(color: &ColorTarget) -> bool {
     kept_through_store(color, |format| format == PixelFormat::RGB9E5Float)
 }

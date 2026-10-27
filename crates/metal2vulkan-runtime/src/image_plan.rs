@@ -107,8 +107,7 @@ pub(super) struct DepthImageFacts {
     /// `DriverFact::DepthTestKeepsDenormals`.
     pub(super) test_denormals: bool,
     /// `DriverFact::DepthTestComparesMagnitudes`: the depth test is Metal's for every value a
-    /// `D32_SFLOAT` image holds, so no target renders over a magnitude stand-in
-    /// (`texture/signed_depth.rs`).
+    /// `D32_SFLOAT` image holds (`Texture::degrade_signed_depth`).
     pub(super) test_magnitudes: bool,
 }
 

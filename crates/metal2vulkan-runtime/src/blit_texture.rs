@@ -538,8 +538,8 @@ impl BlitCommandEncoder {
                             )?;
                             // A depth written as the single-sample path writes one announces as it
                             // does.
-                            destination_texture.degrade_depth_upload(CALL, aspect, true, true);
-                            destination_texture.degrade_depth_denormals(CALL, aspect, false, true);
+                            destination_texture.degrade_depth_upload(CALL, aspect, true);
+                            destination_texture.degrade_depth_denormals(CALL, aspect, false);
                             copy.announce(this.core().device(), CALL, destination_texture);
                             let format = destination_texture.pixel_format();
                             copy.announce_staging(this.core().device(), format, true);
@@ -605,8 +605,8 @@ impl BlitCommandEncoder {
                 let plan = plan_copy(CALL, texture, &region, &unit, &layout, source_buffer, true)?;
                 let written: Vec<ImageRegion> = plan.regions.iter().map(|r| r.image).collect();
                 this.buffer_texture_copy(source_buffer, texture, plan, true)?;
-                texture.degrade_depth_upload(CALL, unit.aspect, true, true);
-                texture.degrade_depth_denormals(CALL, unit.aspect, false, true);
+                texture.degrade_depth_upload(CALL, unit.aspect, true);
+                texture.degrade_depth_denormals(CALL, unit.aspect, false);
                 // Into a texture Metal keeps compressed: the texels its blit writes.
                 if let Some(rule) = rule_of(texture) {
                     this.compressed_image(texture, &written, &[rule])?;
@@ -1479,8 +1479,8 @@ impl BlitCommandEncoder {
                         let regions: Vec<vk::ImageCopy> = regions.iter().map(image_copy).collect();
                         direct.push((from.image, to.image, regions));
                         // A depth that may hold a negative value or a NaN, copied as it is.
-                        if to.aspect == ImageAspectFlags::DEPTH && source.may_hold_signed_depth() {
-                            destination.degrade_signed_depth(call, true);
+                        if to.aspect == ImageAspectFlags::DEPTH {
+                            destination.degrade_signed_depth(call);
                         }
                     }
                 }
@@ -1531,8 +1531,8 @@ impl BlitCommandEncoder {
                 )?;
                 uses.extend(copy.uses.iter().cloned());
                 stages |= copy.stages;
-                destination.degrade_depth_upload(call, to.aspect, true, true);
-                destination.degrade_depth_denormals(call, to.aspect, false, true);
+                destination.degrade_depth_upload(call, to.aspect, true);
+                destination.degrade_depth_denormals(call, to.aspect, false);
                 planned.push(copy);
             }
             self.command_in_reading(stages, &uses, (&fresh_reads, &[]), |device, raw| {
@@ -1614,9 +1614,8 @@ impl BlitCommandEncoder {
                 })?;
                 uses.push(reads(&scratch, 0..length));
                 for (to, _) in &staging.into {
-                    let signed = source.may_hold_signed_depth();
-                    destination.degrade_depth_upload(call, to.aspect, signed, true);
-                    destination.degrade_depth_denormals(call, to.aspect, false, true);
+                    destination.degrade_depth_upload(call, to.aspect, true);
+                    destination.degrade_depth_denormals(call, to.aspect, false);
                 }
                 Some((scratch, through))
             }
@@ -1757,8 +1756,8 @@ impl BlitCommandEncoder {
                         )
                         .map_err(copy_problem)?;
                         if into_texture {
-                            texture.degrade_depth_upload(call, image_unit.aspect, true, true);
-                            texture.degrade_depth_denormals(call, image_unit.aspect, false, true);
+                            texture.degrade_depth_upload(call, image_unit.aspect, true);
+                            texture.degrade_depth_denormals(call, image_unit.aspect, false);
                         }
                         self.buffer_texture_copy(buffer, texture, plan, into_texture)?;
                     }

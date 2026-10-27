@@ -18,9 +18,9 @@
 //! skipped, with an `XR-TEXTURE-FILLS-SKIPPED` line, and so are `Depth32Float` and
 //! `Depth32Float_Stencil8` where their uploads announce that the device may store depth outside
 //! `[0, 1]` clamped (`restricted-depth-upload`, checked to fire once, at the first of them, where a
-//! depth image may clamp); a differing format prints its cases on one `XR-TEXTURE-FILLS-DIFFERS` line. The
-//! two-plane formats in private textures of their own memory replay `tfl4.swift` the same way, 8
-//! texels wide (`OWN_TWO_PLANES`).
+//! depth image may clamp); a differing format prints its cases on one `XR-TEXTURE-FILLS-DIFFERS`
+//! line. The two-plane formats in private textures of their own memory replay `tfl4.swift` the same
+//! way, 8 texels wide (`OWN_TWO_PLANES`).
 //!
 //! A heap case's digest holds each changed run's first 64 bytes and its length, which is what the
 //! probes printed. Exactly two cases of the whole table have a longer run -- `b5` of 550 and of

@@ -207,15 +207,16 @@ unsafe fn write(
 
 impl Image {
     /// Whether its CPU copies run on the host: it was made with host-transfer usage, moved and
-    /// zeroed on the host (the module docs). With a decoded twin too: a read copies the BC image's blocks, and a write's decode into the twin is
-    /// made on the CPU and copied into the twin on the host at once (`Image::decode_written`).
+    /// zeroed on the host (the module docs). With a decoded twin too: a read copies the BC image's
+    /// blocks, and a write's decode into the twin is made on the CPU and copied into the twin on
+    /// the host at once (`Image::decode_written`).
     pub(super) fn takes_host_copies(&self) -> bool {
         self.host_copies && self.device.shared().host_copies.is_some()
     }
 
     /// Copy `bytes`, laid out as `copy` reads them from a buffer, into the image on the host;
-    /// the image [takes host copies](Self::takes_host_copies). Whether it did: not while the image presents a
-    /// stand-in (its texture's bytes detached meanwhile), whose image takes none.
+    /// the image [takes host copies](Self::takes_host_copies). Whether it did: not while the image
+    /// presents a stand-in (its texture's bytes detached meanwhile), whose image takes none.
     pub(super) fn host_write(
         &self,
         copy: vk::BufferImageCopy,

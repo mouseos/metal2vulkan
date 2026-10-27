@@ -635,7 +635,6 @@ impl Device {
             kept_outside: AtomicBool::new(false),
             host_shadow: Mutex::default(),
             between: OnceLock::new(),
-            signed_depth: AtomicBool::new(false),
             detached: Mutex::new(None),
             first_move: Mutex::new(None),
             host_copies: false,
