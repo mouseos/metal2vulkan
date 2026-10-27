@@ -1472,8 +1472,7 @@ pub enum DriverFact {
     /// Metal's own load and store actions load and store
     /// (`MVKAttachmentDescription::getMTLStoreAction` at 1.4.1), so the GPU's tile store is
     /// Metal's by construction. On a driver with it the runtime announces no `snorm-minimum-kept`
-    /// or `shared-exponent-kept`, and its exact tile store (`TileStorePolicy::Exact`) adds no load
-    /// pass for such an attachment.
+    /// or `shared-exponent-kept`.
     TileStoreIsMetals,
     /// A buffer bound to memory the driver imported from a host pointer
     /// (`VK_EXT_external_memory_host`) reads and writes, at each submission, the pages mapped at

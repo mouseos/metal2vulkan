@@ -4,14 +4,13 @@
 use crate::device::profile::{GuestIsolation, HandleDomain, PointerDomain};
 
 /// Policy inputs of `Device::new`. Every field but `decoded_texels`, `heap_compression`,
-/// `completion`, `tile_store`, `resolve`, `batch_order`, `render_lowering` and
-/// `host_page_textures` can change emitted code, so the profile carries it (containment as the
-/// encoding it selects) and its fingerprint covers it; those eight are the runtime's alone (the
-/// texels of a carried texture's decoded twin, a heap's compressed texture's image, when the host
-/// sees a command buffer complete, what a render pass's load leaves in the texels its draws do not
-/// write, how a multisampled color attachment resolves, how a batch begins after the earlier ones
-/// of its queue, where a render encoder's calls are lowered, and what holds a sampled texture over
-/// host pages), and no profile carries them.
+/// `completion`, `resolve`, `batch_order`, `render_lowering` and `host_page_textures` can change
+/// emitted code, so the profile carries it (containment as the encoding it selects) and its
+/// fingerprint covers it; those seven are the runtime's alone (the texels of a carried texture's
+/// decoded twin, a heap's compressed texture's image, when the host sees a command buffer
+/// complete, how a multisampled color attachment resolves, how a batch begins after the earlier
+/// ones of its queue, where a render encoder's calls are lowered, and what holds a sampled texture
+/// over host pages), and no profile carries them.
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -76,11 +75,6 @@ pub struct DevicePolicy {
     /// submission of its own, seen complete at its own end. The runtime's choice alone: no
     /// emitted code changes.
     pub completion: CompletionPolicy,
-    /// Whether a render pass that loads a signed normalized or `RGB9E5Float` color attachment and
-    /// draws keeps the texels its draws do not write as the device's load and store leave them
-    /// (the default), or as Metal's tile store writes them back in the tiles a draw reaches. The
-    /// runtime's choice alone: no emitted code changes.
-    pub tile_store: TileStorePolicy,
     /// Whether a multisampled color attachment whose format has Metal's resolve rule resolves by
     /// the device's own `AVERAGE` in the pass (the default), or by Metal's rule in one more render
     /// pass instance after it, on a device whose average is not measured to be Metal's. The
@@ -112,8 +106,7 @@ impl DevicePolicy {
     /// multisampled `Depth32Float` texture's texels in a
     /// depth image, compact codes in a carried texture's decoded twin, the driver's compressed image of a
     /// heap's texture Metal keeps compressed, command buffers ready together in one kernel
-    /// submission, the device's load and store of a signed normalized or `RGB9E5Float` color
-    /// attachment, the device's resolve of a multisampled color attachment, batches of one
+    /// submission, the device's resolve of a multisampled color attachment, batches of one
     /// queue ordered by their ends where the driver runs them one after another, and a sampled
     /// texture over host pages in place where the device's check passed.
     pub const UNTRUSTED: DevicePolicy = DevicePolicy {
@@ -133,7 +126,6 @@ impl DevicePolicy {
         decoded_texels: DecodedTexelsPolicy::Compact,
         heap_compression: HeapCompressionPolicy::Compressed,
         completion: CompletionPolicy::Grouped,
-        tile_store: TileStorePolicy::Device,
         resolve: ResolvePolicy::Device,
         batch_order: BatchOrderPolicy::Ends,
         render_lowering: RenderLoweringPolicy::AtCall,
@@ -150,8 +142,7 @@ impl DevicePolicy {
     /// ([`YCbCrFilterPolicy::Exact`]), its decode of a carried texture's texels
     /// ([`DecodedTexelsPolicy::Exact`]), a heap's texture whose bytes alias the heap's
     /// as written ([`HeapCompressionPolicy::Uncompressed`]), each command buffer seen complete
-    /// at its own end ([`CompletionPolicy::Exact`]), a loaded attachment's texels as its tile
-    /// store leaves them ([`TileStorePolicy::Exact`]), its multisample color resolve
+    /// at its own end ([`CompletionPolicy::Exact`]), its multisample color resolve
     /// ([`ResolvePolicy::Exact`]), each batch ordered after the earlier ones of its queue by
     /// the accesses it depends on alone ([`BatchOrderPolicy::Exact`]), each render encoder
     /// call lowered inside the call, which returns every refusal
@@ -170,7 +161,6 @@ impl DevicePolicy {
             decoded_texels: DecodedTexelsPolicy::Exact,
             heap_compression: HeapCompressionPolicy::Uncompressed,
             completion: CompletionPolicy::Exact,
-            tile_store: TileStorePolicy::Exact,
             resolve: ResolvePolicy::Exact,
             batch_order: BatchOrderPolicy::Exact,
             render_lowering: RenderLoweringPolicy::AtCall,
@@ -534,34 +524,6 @@ pub enum CompletionPolicy {
     /// Each batch in a submission of its own that signals its own values, so each command buffer
     /// is seen complete, and its event signals land, at its own end, as Metal's are; each batch's
     /// submission checks run once the batch before it was submitted.
-    Exact,
-}
-
-/// What a render pass that loads a single-sampled color attachment of a signed normalized format
-/// (`R8Snorm`, `RG8Snorm`, `RGBA8Snorm`, `R16Snorm`, `RG16Snorm`, `RGBA16Snorm`) or of
-/// `RGB9E5Float`, stores it and draws leaves in the texels its draws do not write. An Apple GPU
-/// writes each 32 x 32 tile a draw reaches back through its texels' values (an Apple M3 Max under
-/// macOS 27.0.1): a channel's minimum code (-128, or -32768), which reads as -1.0 as the code above
-/// it does, is stored as that code (-127, -32767), and an `RGB9E5Float` word whose largest
-/// mantissa is below 256 under an exponent above 0 is stored normalized (its mantissas shifted up
-/// as its exponent steps down, to 0 at most). No Metal write leaves such a code or word: only
-/// uploaded or copied bytes hold one. The extended-range, padded 10-bit and bfloat attachments'
-/// tile store, the runtime's load pass, runs under either value. The runtime's choice alone: no
-/// emitted code changes.
-#[non_exhaustive]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum TileStorePolicy {
-    /// The device's load and store (the default): such a texel keeps its code or word, announced
-    /// `snorm-minimum-kept` or `shared-exponent-kept` at each draw in such a pass.
-    #[default]
-    Device,
-    /// The runtime's load pass rewrites such an attachment's texels in the tiles the pass's draws
-    /// reach, as Metal's tile store leaves them, before the pass (as it does an extended-range
-    /// attachment's): a copy of the render area into a scratch buffer and back, with a dispatch.
-    /// An attachment the load pass cannot take (a texture held as a shadow, a sparse one, or one
-    /// whose image the device does not copy both ways) keeps the device's, announced as under
-    /// [`Device`](Self::Device).
     Exact,
 }
 

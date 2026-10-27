@@ -6843,7 +6843,7 @@ impl RenderLowering {
     /// draw reaches back through the channels' values, so a minimum code (-128, or -32768) the
     /// draws do not write is stored as the code above it, where such an attachment keeps it. Not
     /// on a driver whose pass stores it so too (`DriverFact::TileStoreIsMetals`: MoltenVK's pass
-    /// is a Metal pass), nor for an attachment the load pass rewrites (`TileStorePolicy::Exact`).
+    /// is a Metal pass).
     fn degrade_snorm_minimum(device: &Device, kept: &[String]) {
         if kept.is_empty() {
             return;
@@ -6865,8 +6865,7 @@ impl RenderLowering {
     /// Metal's pass, once it draws, writes each tile a draw reaches back through its texels'
     /// values, so a word the draws do not write whose largest mantissa is below 256 under an
     /// exponent above 0 is stored normalized, where such an attachment keeps it. Not on a driver
-    /// whose pass stores it so too (`DriverFact::TileStoreIsMetals`), nor for an attachment the
-    /// load pass rewrites (`TileStorePolicy::Exact`).
+    /// whose pass stores it so too (`DriverFact::TileStoreIsMetals`).
     fn degrade_shared_exponent(device: &Device, kept: &[String]) {
         if kept.is_empty() {
             return;

@@ -95,14 +95,6 @@ compile does. `DevicePolicy::default()` is `DevicePolicy::UNTRUSTED`:
   [FAST-PATHS.md](FAST-PATHS.md) lists every choice, its bound and the measured cost of its exact
   form. On MoltenVK on an Apple GPU, whose sampler and `float` functions are Metal's own, most of
   these choices change nothing.
-- **The device's load and store of a signed normalized or `RGB9E5Float` attachment**
-  (`TileStorePolicy::Device`, the runtime's choice; no pipeline differs). A render pass that loads
-  one and draws keeps the texels its draws do not write as they were, where Metal's tile store
-  writes a channel's minimum code back as the code above it and an unnormalized shared-exponent
-  word normalized, announced as `snorm-minimum-kept` and `shared-exponent-kept`.
-  `tile_store = TileStorePolicy::Exact`, which `exact_answers()` selects, rewrites them before
-  the pass as Metal's store leaves them, through the extended-range attachments' load pass. On
-  MoltenVK the pass is a Metal pass and stores them as Metal's under either value.
 - **The device's resolve of a multisampled color attachment** (`ResolvePolicy::Device`, the
   runtime's choice; no pipeline differs). A pass resolves a color attachment by the device's
   `AVERAGE` in the pass, which rounds the average (a tie, an sRGB average) as the device does and
@@ -2078,16 +2070,14 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   minimum code (-128, or -32768 for 16 bits) as the code above it (-127, -32767) in each tile a draw
   reaches: a texel whose bytes no Metal write left (uploaded or copied bytes) keeps a code Metal's
   pass would change. Not on a driver whose pass stores the codes as Metal's
-  (`DriverFact::TileStoreIsMetals`: MoltenVK on Apple's GPUs, whose pass is a Metal pass), nor under
-  `TileStorePolicy::Exact` for an attachment the load pass rewrites as Metal's store leaves it.
+  (`DriverFact::TileStoreIsMetals`: MoltenVK on Apple's GPUs, whose pass is a Metal pass).
 - `metal2vulkan-degrade-shared-exponent-kept` (precision). `SharedExponentKept`: A draw in a render
   pass that loads a single-sampled `RGB9E5Float` color attachment and does not discard it at the
   store. Cost: the texels the pass's draws do not write keep their words; Metal's pass normalizes a
   word whose largest mantissa is below 256 (its exponent above 0) in each tile a draw reaches: a
   texel whose bytes no Metal write left (uploaded or copied words) keeps a word Metal's pass would
   change, of the same value. Not on a driver whose pass stores the words as Metal's
-  (`DriverFact::TileStoreIsMetals`), nor under `TileStorePolicy::Exact` for an attachment the load
-  pass rewrites as Metal's store leaves it.
+  (`DriverFact::TileStoreIsMetals`).
 - `metal2vulkan-degrade-two-plane-buffer-blit` (precision). `TwoPlaneBufferBlit`: A blit between a
   buffer and a level of `RGB10A8_2P_XR10` or its sRGB twin whose width is not a multiple of 4,
   where Metal's blit addresses the level's rows `⌊4 w / 16⌋ · 16` bytes apart, short of where they
@@ -2201,8 +2191,7 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
 - `metal2vulkan-degrade-unreached-tiles-rewritten` (precision). `UnreachedTilesRewritten`: A render
   pass that loads a color attachment of an extended-range, padded 10-bit or bfloat format
   (`BGR10_XR`, `BGRA10_XR`, `RGB10A8_2P_XR10`, `R10Unorm_X6`, `RG10Unorm_X12` and their sRGB twins,
-  `RGB10A2Unorm_sRGB`, `R16Bfloat`, `RG16Bfloat` and `RGBA16Bfloat`), or under
-  `TileStorePolicy::Exact` of a signed normalized format or `RGB9E5Float`, stores it and draws,
+  `RGB10A2Unorm_sRGB`, `R16Bfloat`, `RG16Bfloat` and `RGBA16Bfloat`), stores it and draws,
   whose load pass rewrites every 32 x 32 tile of its render area: Metal's pass rewrites
   only the tiles a draw's primitives reach, and every tile only where a color attachment of the pass
   is cleared and stored (announced where none is, or where the pass renders more than one layer).
@@ -2211,8 +2200,7 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   word's top two bits zeros) and BGRA10_XR alpha codes clamped to [384, 894], so an out-of-range raw
   alpha reads back changed, a padded word's low six bits zeroed (an sRGB twin's code moved through
   Metal's table), a bfloat code moved through half (out of half's range to an infinity or zero, a
-  NaN to 0x7fc0) and, under the exact tile store, a signed normalized minimum code raised and an
-  RGB9E5Float word normalized; the tiles a draw reaches are Metal's.
+  NaN to 0x7fc0); the tiles a draw reaches are Metal's.
 - `metal2vulkan-degrade-zero-layer-map-after-release` (precision). `ZeroLayerMapAfterRelease`: A
   draw in a render pass over a rasterization-rate map of no layers that was made after the device
   released a map of one or more layers, or reset from one of layers. Cost: the draws write nothing,

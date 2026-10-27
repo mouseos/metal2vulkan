@@ -3127,8 +3127,7 @@ pub struct WorkCounts {
     /// backings included.
     pub ahead_nanos: u64,
     /// Load passes render encoders recorded: one per extended-range, padded 10-bit or bfloat
-    /// color attachment (and under `TileStorePolicy::Exact` signed normalized or `RGB9E5Float`
-    /// one) that a pass which draws loads and stores, whose words a dispatch rewrote in the tiles
+    /// color attachment that a pass which draws loads and stores, whose words a dispatch rewrote in the tiles
     /// the pass's draws reach before the pass, as Metal's tile store leaves them
     /// (`render/unused_bits_load.rs`).
     pub unused_bits_load_passes: u64,

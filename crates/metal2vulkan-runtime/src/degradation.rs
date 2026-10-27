@@ -1293,9 +1293,7 @@ degradations! {
         /// blit), where the device's pass keeps the bytes its draws do not write. Announced at
         /// every draw, an indirect command buffer's executed commands' too, naming every such
         /// attachment of the pass. Not where `DriverFact::TileStoreIsMetals` holds (MoltenVK's
-        /// pass is a Metal pass, whose tile store rewrites the codes as Metal's does), nor under
-        /// [`metal2vulkan::device::TileStorePolicy::Exact`] for an attachment the load pass
-        /// (`render/unused_bits_load.rs`) rewrites.
+        /// pass is a Metal pass, whose tile store rewrites the codes as Metal's does).
         SnormMinimumKept = "snorm-minimum-kept", Precision,
             "the texels the pass's draws do not write keep their bytes; Metal's pass rewrites a \
              channel's minimum code (-128, or -32768 for 16 bits) as the code above it (-127, \
@@ -1311,9 +1309,7 @@ degradations! {
         /// normalized, none other changed), where the device's pass keeps the bytes its draws do
         /// not write. Announced at every draw, an indirect command buffer's executed commands'
         /// too, naming every such attachment of the pass. Not where `DriverFact::TileStoreIsMetals`
-        /// holds (MoltenVK's pass is a Metal pass), nor under
-        /// [`metal2vulkan::device::TileStorePolicy::Exact`] for an attachment the load pass
-        /// (`render/unused_bits_load.rs`) rewrites.
+        /// holds (MoltenVK's pass is a Metal pass).
         SharedExponentKept = "shared-exponent-kept", Precision,
             "the texels the pass's draws do not write keep their words; Metal's pass normalizes \
              a word whose largest mantissa is below 256 (its exponent above 0) in each tile a \
@@ -1489,9 +1485,7 @@ degradations! {
         /// A render pass that loads a color attachment of an extended-range, padded 10-bit or
         /// bfloat format (`BGR10_XR`, `BGRA10_XR`, `RGB10A8_2P_XR10`, `R10Unorm_X6`,
         /// `RG10Unorm_X12` and their sRGB twins, `RGB10A2Unorm_sRGB`, `R16Bfloat`, `RG16Bfloat`
-        /// and `RGBA16Bfloat`), or under
-        /// [`metal2vulkan::device::TileStorePolicy::Exact`] of a
-        /// signed normalized format or `RGB9E5Float`, stores it and draws, whose load pass
+        /// and `RGBA16Bfloat`), stores it and draws, whose load pass
         /// (`render/unused_bits_load.rs`) rewrites every 32 x 32 tile of its render area: Metal's
         /// pass rewrites only the tiles a draw's primitives reach (on
         /// an Apple M4 and an Apple M3 Max, alike), and every tile only where a color
@@ -1505,8 +1499,7 @@ degradations! {
              clamped to [384, 894], so an out-of-range raw alpha reads back changed, a padded \
              word's low six bits zeroed (an sRGB twin's code moved through Metal's table), a \
              bfloat code moved through half (out of half's range to an infinity or zero, a NaN \
-             to 0x7fc0) and, under the exact tile store, a signed normalized minimum code raised \
-             and an RGB9E5Float word normalized; the tiles a draw reaches are Metal's";
+             to 0x7fc0); the tiles a draw reaches are Metal's";
         /// A draw in a render pass over a rasterization-rate map of no layers that was made after
         /// the device released a map of one or more layers, or reset from one of layers
         /// (`rate_mapped_pass.rs`). The draw

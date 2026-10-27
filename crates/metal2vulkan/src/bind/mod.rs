@@ -101,8 +101,7 @@
 //! through [`tiled_texels_module`]. A render pass that loads an extended-range, padded 10-bit or
 //! bfloat color attachment and draws first rewrites the bits its codes leave unused through
 //! [`unused_bits_module`] of its format, in the 32 x 32 tiles a mask names, as Metal's tile store
-//! does; under the exact tile store it also raises a signed normalized attachment's minimum codes
-//! and normalizes an `RGB9E5Float` attachment's words there. The tiles a pass's draws reach, which Metal's tile store writes back, are the mask one
+//! does. The tiles a pass's draws reach, which Metal's tile store writes back, are the mask one
 //! dispatch of [`tile_reach_module`] bins its captured primitives into: [`capture_assembly_module`]
 //! assembles them from a pass's capture draws' records, and [`capture_settle_module`] widens the
 //! mask to every tile where the binning counted a primitive it cannot answer. A GPU blit that reads

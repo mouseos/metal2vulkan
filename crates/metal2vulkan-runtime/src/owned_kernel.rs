@@ -162,8 +162,7 @@ pub(super) enum OwnedModule {
     /// surface's two planes (`ycbcr.rs`), its write shadow bound as a storage image.
     YCbCrWrite,
     /// `bind::unused_bits_module` of one format held as one kind of words: an extended-range,
-    /// padded 10-bit or bfloat texture's words (or, under `TileStorePolicy::Exact`, a signed
-    /// normalized or `RGB9E5Float` one's) in the tiles a mask names rewritten as Metal's tile
+    /// padded 10-bit or bfloat texture's words in the tiles a mask names rewritten as Metal's tile
     /// store leaves them, before a pass that loads it and draws (`render/unused_bits_load.rs`).
     UnusedBits(PixelFormat, TexelWords),
     /// `bind::tiled_texels_module`: a heap texture's elements moved between its image's tight
