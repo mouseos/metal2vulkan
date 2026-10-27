@@ -18,8 +18,9 @@
 //! the consumer's test sweeps: the blur textures' (`ShaderRead | RenderTarget |
 //! BlockWritesOnly`, `0x10005`), `ShaderRead | BlockWritesOnly` (`0x10001`), and either with
 //! `ShaderWrite` (`0x10007`, `0x7`). A blit reads every level back: every channel must hold the
-//! half written (a level not written its fill), and neither the making nor the dispatch may
-//! announce anything. `read` then reads level 0 back through a `texture2d<half, access::read>` and
+//! half written (a level not written its fill), the making may announce only the notes its
+//! kernels' stages record (the device's own answers, [`recorded`]), and the dispatch nothing.
+//! `read` then reads level 0 back through a `texture2d<half, access::read>` and
 //! stores the half's bits: each must be the half stored, or the read announces
 //! `device-nan-encoding` (a read's NaN is the device's decode). The host's buffers are
 //! write-combined, which a device without unified memory places in device-local memory.
@@ -31,14 +32,18 @@
 use super::degrade_notices::{counts, on_device_with};
 use super::{buffer_with_options, layer_reported_nothing, read_buffer, WAIT};
 use crate::air_library::AirLibrary;
+use metal2vulkan::cache::VariantKey;
+use metal2vulkan::library::Library;
 use metal2vulkan::metal::{PixelFormat, TextureUsage};
-use metal2vulkan::pipeline::{ComputePipelineDescriptor, StageSource};
+use metal2vulkan::pipeline::{ComputePipelineDescriptor, FunctionDescriptor, Stage, StageSource};
+use metal2vulkan::Budget;
 use metal2vulkan_devtools::llvm_assemble_text;
 use metal2vulkan_runtime::{
     BlitOption, Buffer, CommandBufferStatus, ComputePipelineState, CpuCacheMode, Degradation,
     Device, HazardTrackingMode, Origin, PipelineOptions, ResourceOptions, Size, StorageMode,
     Texture, TextureDescriptor,
 };
+use std::collections::BTreeSet;
 
 /// The halves written: quiet NaNs, signalling NaNs, negative NaNs of both kinds, then
 /// infinities, zeros, denormals and normals.
@@ -195,6 +200,36 @@ declare { <4 x half>, i8 } @air.read_texture_2d.v4f16(ptr addrspace(1), ptr addr
 !20 = !{i32 2, i32 8, i32 0}
 !21 = !{!"Metal", i32 4, i32 0, i32 0}
 "#;
+
+/// The kinds making the pipeline states of `names` may announce on `device`: the precision notes
+/// their stages record that no specialization removes, as the device's compile layer compiles them
+/// under the empty variant key.
+fn recorded(device: &Device, names: &[&str]) -> BTreeSet<Degradation> {
+    let compile = device.compile_device();
+    let budget = Budget::standard();
+    let inputs = VariantKey::new().lowering_inputs(Stage::Kernel);
+    let library = Library::from_air(&llvm_assemble_text(KERNELS).unwrap()).unwrap();
+    let mut kinds = BTreeSet::new();
+    for name in names {
+        let function = FunctionDescriptor::new(library.function(name).unwrap());
+        let compiled = compile
+            .compile_function(&function, &inputs, &budget)
+            .unwrap();
+        let descriptor = ComputePipelineDescriptor::new(StageSource::Compiled(compiled));
+        let stage = compile
+            .compile_compute_pipeline(&descriptor, &budget)
+            .unwrap()
+            .stage;
+        kinds.extend(
+            stage
+                .precision_notes
+                .iter()
+                .filter(|&&note| !stage.specialized_notes.iter().any(|s| s.note == note))
+                .map(|&note| Degradation::from_precision_note(note)),
+        );
+    }
+    kinds
+}
 
 /// Kernel `name` of [`KERNELS`] on `device`.
 fn kernel(device: &Device, name: &str) -> ComputePipelineState {
@@ -454,6 +489,8 @@ fn half_nans_written_through_the_blur_keep_their_bits() {
             options.announce_each.insert(Degradation::DeviceNanEncoding);
         },
         |device, messages| {
+            let names = Kind::ALL.map(Kind::name);
+            let recorded = recorded(device, &[names.as_slice(), &["read"]].concat());
             for kind in Kind::ALL {
                 let name = kind.name();
                 for (format, channels) in formats {
@@ -510,7 +547,8 @@ fn half_nans_written_through_the_blur_keep_their_bits() {
                         differ.len(),
                         read_differ.len()
                     );
-                            if !differ.is_empty() || !made.is_empty() || !dispatched.is_empty() {
+                            let made_unrecorded = made.keys().any(|k| !recorded.contains(k));
+                            if !differ.is_empty() || made_unrecorded || !dispatched.is_empty() {
                                 failures.push(format!(
                                     "{what}: {} stored halves differ, making announced {made:?}, \
                              dispatch {dispatched:?}",
