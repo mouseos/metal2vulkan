@@ -238,10 +238,6 @@ fn every_fact() -> Vec<RuntimeFact> {
                 index: 0,
             },
         },
-        RuntimeFact::HeapHalfTexelWrites {
-            stage: Stage::Kernel,
-            packed: true,
-        },
         RuntimeFact::MovableStorageWrites {
             early_variant: true,
         },
@@ -350,7 +346,6 @@ fn variant(f: &RuntimeFact) -> usize {
         RuntimeFact::HeapCrossClassNeutral { .. } => 79,
         RuntimeFact::AnisotropicSampler { .. } => 80,
         RuntimeFact::StorageTextureIntegerChannels { .. } => 81,
-        RuntimeFact::HeapHalfTexelWrites { .. } => 82,
         RuntimeFact::MovableStorageWrites { .. } => 83,
         RuntimeFact::SynthesizedGeometry { .. } => 84,
         RuntimeFact::ObjectThreadgroupArena { .. } => 85,
@@ -494,8 +489,7 @@ fn mechanism_is_total_over_every_fact_and_profile() {
                     crate::device::profile::BufferAccess::Addressed => Mechanism::PushConstant,
                     _ => Mechanism::SyntheticBinding,
                 },
-                RuntimeFact::HeapNumericType { .. }
-                | RuntimeFact::HeapHalfTexelWrites { .. } => Mechanism::BinderView,
+                RuntimeFact::HeapNumericType { .. } => Mechanism::BinderView,
                 RuntimeFact::StageInRegion
                 | RuntimeFact::StageInStride { .. }
                 | RuntimeFact::StorageTextureLevels { .. }
