@@ -368,12 +368,7 @@ pub(crate) fn snapshot_forms(
         let Some(SlotInterface::Texture(t)) = interface.get(&slot) else {
             return SnapshotForm::Bits;
         };
-        let Some(TextureShape::Texture {
-            pixel_format,
-            depth_twin: false,
-            ..
-        }) = bound_texture(shape, slot)
-        else {
+        let Some(TextureShape::Texture { pixel_format, .. }) = bound_texture(shape, slot) else {
             return SnapshotForm::Bits;
         };
         if cross.contains_key(&slot) {

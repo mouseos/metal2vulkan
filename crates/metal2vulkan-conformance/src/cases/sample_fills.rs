@@ -453,13 +453,12 @@ impl Case for SampleFills {
             ));
         }
         // What a multisample fill and its read-back announce on a device that needs them: the
-        // drawn depth copy, a depth texture's twin and its denormals, and shared storage in
+        // drawn depth copy, a depth texture's denormals, and shared storage in
         // system memory. Metal announces none of them, so the notices site differs on such a
         // device, and the difference is justified where one of these fired.
         use metal2vulkan_runtime::Degradation as D;
         for kind in [
             D::DrawnDepthCopy,
-            D::DepthTwin,
             D::DepthDenormals,
             D::SharedInSystemMemory,
             D::ShadowedTextureView,

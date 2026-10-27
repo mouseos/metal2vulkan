@@ -1930,14 +1930,11 @@ enum DepthTexel {
 /// `DontCare`. Stored, it holds the clear or its texels where nothing is drawn, and the draw's
 /// depth 0.25 (`Less`, written) and stencil 0x5a (`Always`, `Replace`) where the draw passes, as
 /// the probe's drawn pixel holds them (here every pixel: the fullscreen triangle); under
-/// `DontCare`, its texels before the pass. A `Depth32Float` texture held in a color image beside
-/// its depth twin (a device whose depth images may not keep every `float`) is
-/// `NotImplemented(Render)` (printed).
+/// `DontCare`, its texels before the pass.
 #[test]
 fn a_depth_or_stencil_texture_without_render_target_usage_renders_as_metal() {
     let (messages, _cache, lane) = lane();
     let name = lane.device.name().to_owned();
-    let (_, _, keeps_floats) = super::texture_blits::depth_images(&lane.device);
     let rgba8 = PixelFormat::RGBA8Unorm;
     let (load, clear) = (LoadAction::Load, LoadAction::Clear);
     let (store, dontcare) = (StoreAction::Store, StoreAction::DontCare);
@@ -2042,17 +2039,6 @@ fn a_depth_or_stencil_texture_without_render_target_usage_renders_as_metal() {
                         l.draw(e, h, &pipeline, 0.25);
                     }
                 });
-                if pf == PixelFormat::Depth32Float && !keeps_floats {
-                    assert_eq!(
-                        ran,
-                        Err(Error::NotImplemented(RuntimeGap::Render)),
-                        "{case}"
-                    );
-                    eprintln!(
-                        "refused: {case} on {name}, a depth twin's texture (Metal renders it)"
-                    );
-                    continue;
-                }
                 ran.unwrap_or_else(|e| panic!("{case} on {name}: {e}"));
                 // What each aspect holds: the draw's where it ran and the pass stored, else the
                 // clear where it cleared and stored, else the texels before the pass.

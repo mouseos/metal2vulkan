@@ -1219,10 +1219,10 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   imported as dma-bufs where the device makes no image over a dma-buf of the texture's own pages
   (the notice names why; `WorkCounts::dma_buf_image_fallbacks` counts it). A heap's texture is a
   shadow of the heap's bytes in its range in three more shapes, each announced with its own reason.
-  A single-sample depth or stencil texture held with no depth twin, whose texels fit its image's
-  bytes, on a device whose driver lays such images apart from the memory they are bound to
-  (`DriverFact::DepthStencilImagesLieApart`): one no such shadow serves, a multisampled one or a
-  depth twin among them, is `heap-depth-stencil-apart` instead. A texture the device binds no image
+  A single-sample depth or stencil texture whose texels fit its image's bytes, on a device whose
+  driver lays such images apart from the memory they are bound to
+  (`DriverFact::DepthStencilImagesLieApart`): one no such shadow serves, a multisampled one among
+  them, is `heap-depth-stencil-apart` instead. A texture the device binds no image
   of to the heap's memory where the heap places it: its optimal image takes no memory type of the
   heap's and no linear image of the device serves (a `Shared` heap's depth texture on MoltenVK), or
   the heap lies over host pages that no linear image over them serves, or its images ask more than
@@ -1738,19 +1738,14 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   reaches for a cubic filter (a fragment stage never does); and one whose elements could not be
   written. Cost: a function reading the state through its ID in an argument buffer reads the
   neutral sampler, where Metal's reads the state.
-- `metal2vulkan-degrade-depth-twin` (performance). `DepthTwin`: A `Depth32Float` texture the program
-  only reads or samples, on a device whose driver is not measured to keep every `float` in a depth
-  image, is held in an `R32_SFLOAT` image with a `D32_SFLOAT` twin for the comparisons the device
-  makes. Cost: a second image of its size, which every copy into it writes too; a copy into it from
-  a depth texture without a twin goes through a scratch buffer.
 - `metal2vulkan-degrade-restricted-depth-upload` (precision). `RestrictedDepthUpload`: An upload
   (`replace_region`, a blit from a buffer) into the 32-bit float depth of a texture's depth image,
   on a device without `VK_EXT_depth_range_unrestricted` enabled, where Vulkan leaves a value outside
   `[0, 1]` undefined, whose driver is not measured to keep one
-  (`DriverFact::DepthImageKeepsValuesOutsideUnitRange`): a texture without a twin. And a render
-  pass's NaN clear depth on such a device, which Metal stores as `0x7fc00000`, cleared to 1.0. Cost:
-  a value outside [0, 1] may be stored clamped to [0, 1], where Metal's keeps it, so reads, samples,
-  comparisons and depth tests of it can differ.
+  (`DriverFact::DepthImageKeepsValuesOutsideUnitRange`). And a render pass's NaN clear depth on such
+  a device, which Metal stores as `0x7fc00000`, cleared to 1.0. Cost: a value outside [0, 1] may be
+  stored clamped to [0, 1], where Metal's keeps it, so reads, samples, comparisons and depth tests
+  of it can differ.
 - `metal2vulkan-degrade-host-read-dispatch-arguments` (performance). `HostReadDispatchArguments`: An
   indirect dispatch, or a dispatch after `setStageInRegionWithIndirectBuffer:indirectBufferOffset:`:
   its arguments or its stage-in region are GPU memory the work before it may write, so they are
@@ -1792,8 +1787,8 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
 - `metal2vulkan-degrade-heap-depth-stencil-apart` (precision). `HeapDepthStencilApart`: A depth or
   stencil texture made in a heap on a device whose driver lays depth and stencil images apart from
   the memory they are bound to (`DriverFact::DepthStencilImagesLieApart`) that no shadow of the
-  heap's bytes serves: a multisampled texture, which Vulkan copies to and from no buffer, one whose
-  texels do not fit its bytes, or one with a depth twin. Cost: the texture's texels lie apart from
+  heap's bytes serves: a multisampled texture, which Vulkan copies to and from no buffer, or one
+  whose texels do not fit its bytes. Cost: the texture's texels lie apart from
   the heap's bytes: a write through a buffer
   or texture over its bytes changes none of them, and its writes change none of those resources'
   bytes, where Metal's texture aliases them.
@@ -1877,7 +1872,7 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   sized or made in a heap (never a device's own texture, whose layout nothing shows), on a device
   whose driver keeps depth and stencil images GPU-optimized whatever their create info
   (`DriverFact::DepthStencilImagesStayGpuOptimized`), that no shadow of Metal's tiles in the heap's
-  bytes serves (a multisample texture, a depth twin, a format whose layout is not measured): Metal
+  bytes serves (a multisample texture, a format whose layout is not measured): Metal
   lays the texture out without its compression metadata, and the runtime's image keeps it. Cost: the
   texture's image keeps the GPU-optimized layout Metal
   drops with the property off, so its bytes in the heap are not Metal's layout of its texels (where
@@ -1885,8 +1880,7 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   name for the shapes they cover); heap_texture_size_and_align answers Metal's own size and
   alignment for the descriptor wherever the runtime models them, and the larger of the images' and
   Metal's for a texture whose images need more bytes or a coarser alignment that no shadow of the
-  heap's bytes holds it to (a depth twin among them), where a heap sized by Metal's answers holds
-  fewer such textures.
+  heap's bytes holds it to, where a heap sized by Metal's answers holds fewer such textures.
 - `metal2vulkan-degrade-narrow-surface-rows` (precision). `NarrowSurfaceRows`: A texture of an
   IOSurface plane of more than one row under 16 bytes a row: Metal's GPU writes its rows 16 bytes
   apart and reads every row past the first as memory-dependent bytes (zeros in a fresh process;
@@ -2391,8 +2385,7 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   heap texture sized or made (`heap_texture_size_and_align`, `Heap::new_texture`) whose images on the
   device need more bytes or a coarser alignment than Metal's answer, which the runtime models, and
   which no shadow of the texture's bytes holds it to: not a multisample texture, whose image lies in
-  memory of its own, nor one whose planes or Metal's tiles fit its bytes, and not one held with a
-  depth twin. The answer is then the larger of the two, since no image binds at Metal's offsets.
+  memory of its own, nor one whose planes or Metal's tiles fit its bytes. The answer is then the larger of the two, since no image binds at Metal's offsets.
   Every other such texture answers Metal's numbers and announces nothing here. Not where
   `optimized-depth-stencil-texture` says why. Cost:
   heap_texture_size_and_align answers more bytes or a coarser alignment than Metal's, so a heap

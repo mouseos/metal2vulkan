@@ -962,19 +962,16 @@ pub enum DriverFact {
     /// A `D32_SFLOAT` image keeps each denormal value a copy writes into it, as Metal's
     /// `Depth32Float` texel keeps any `float`. Vulkan states no such rule, and RADV's and ANV's
     /// depth images answer a denormal as zero (RADV's of its sign), to a copy out of them and, on
-    /// RADV, to the shader's reads. On a driver without it `new_texture` holds a `Depth32Float`
-    /// texture the program only reads or samples in an `R32_SFLOAT` image with a `D32_SFLOAT` twin
-    /// for the comparisons the device makes (`image_plan::plan_depth_twin`). A clear to a denormal
-    /// and a copy from a buffer keep it too on such a driver; RADV and ANV store either as a zero,
-    /// and keep only a host copy's (`replace_region` on the host), so a write on the GPU that may
-    /// store a denormal there announces `depth-denormals`.
+    /// RADV, to the shader's reads. A clear to a denormal and a copy from a buffer keep it too on
+    /// such a driver; RADV and ANV store either as a zero, and keep only a host copy's
+    /// (`replace_region` on the host), so a write on the GPU that may store a denormal there
+    /// announces `depth-denormals`.
     DepthImageKeepsDenormals,
     /// Without `VK_EXT_depth_range_unrestricted` enabled, a `D32_SFLOAT` image keeps each value
     /// outside `[0, 1]` a copy writes into it, where Vulkan leaves such a value undefined
     /// (`VUID-vkCmdCopyBufferToImage-pRegions-07931`) and ANV stores it clamped. With the extension
-    /// Vulkan keeps it on every driver. On a driver without either, `new_texture` holds a
-    /// `Depth32Float` texture the program only reads or samples with a twin, as above, and an
-    /// upload into a depth image announces `restricted-depth-upload`.
+    /// Vulkan keeps it on every driver. On a driver without either, an upload into a depth image
+    /// announces `restricted-depth-upload`.
     DepthImageKeepsValuesOutsideUnitRange,
     /// A fragment shader's `FragDepth` is stored in a 32-bit float depth attachment unchanged:
     /// each value in `[0, 1]` it is given, and, for the rest, the value it stored when given it

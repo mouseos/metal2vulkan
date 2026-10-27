@@ -255,11 +255,10 @@ degradations! {
         /// dma-bufs where the device makes no image over a dma-buf of the texture's own pages (the
         /// notice names why). A heap's texture is a shadow of the heap's bytes in its range in
         /// three more shapes, each announced with its own reason (`texture/heap.rs`). A
-        /// single-sample depth or stencil texture held with no depth twin, whose texels fit the
-        /// bytes its image takes, on a device whose driver lays such images apart from the memory
+        /// single-sample depth or stencil texture whose texels fit the bytes its image takes, on a device whose driver lays such images apart from the memory
         /// they are bound to
         /// ([`metal2vulkan::device::DriverFact::DepthStencilImagesLieApart`]): one no such shadow
-        /// serves, a multisampled one or a depth twin among them, lies apart from those bytes
+        /// serves, a multisampled one among them, lies apart from those bytes
         /// instead (`heap-depth-stencil-apart`). A texture the device binds no image of to the
         /// heap's memory where the heap places it: its optimal image takes no memory type of the
         /// heap's and no linear image of the device serves (a `Shared` heap's depth texture on
@@ -854,19 +853,10 @@ degradations! {
         UnlistedArgumentSampler = "unlisted-argument-sampler", Precision,
             "a function reading the state through its ID in an argument buffer reads the \
              neutral sampler, where Metal's reads the state";
-        /// A `Depth32Float` texture the program only reads or samples, on a device whose driver
-        /// is not measured to keep every `float` in a depth image (`device/driver_facts.rs`: a
-        /// denormal, and without `VK_EXT_depth_range_unrestricted` a value outside `[0, 1]`), is
-        /// held in an `R32_SFLOAT` image with a `D32_SFLOAT` twin for the comparisons the device
-        /// makes (`image_plan.rs`).
-        DepthTwin = "depth-twin", Performance,
-            "a second image of its size, which every copy into it writes too; a copy into it \
-             from a depth texture without a twin goes through a scratch buffer";
         /// An upload (`replace_region`, a blit from a buffer) into the 32-bit float depth of a
         /// texture's depth image, on a device without `VK_EXT_depth_range_unrestricted` enabled,
         /// where Vulkan leaves a value outside `[0, 1]` undefined, whose driver is not measured to
-        /// keep one (`DriverFact::DepthImageKeepsValuesOutsideUnitRange`): a texture without a
-        /// twin. And a render pass's NaN clear depth on such a device, which Metal stores as
+        /// keep one (`DriverFact::DepthImageKeepsValuesOutsideUnitRange`). And a render pass's NaN clear depth on such a device, which Metal stores as
         /// `0x7fc00000`, cleared to 1.0 (`nan_clear.rs`).
         RestrictedDepthUpload = "restricted-depth-upload", Precision,
             "a value outside [0, 1] may be stored clamped to [0, 1], where Metal's keeps it, so \
@@ -925,7 +915,7 @@ degradations! {
         /// stencil images apart from the memory they are bound to
         /// ([`metal2vulkan::device::DriverFact::DepthStencilImagesLieApart`]) that no shadow of the
         /// heap's bytes serves: a multisampled texture, which Vulkan copies to and from no buffer,
-        /// one whose texels do not fit its bytes, or one with a depth twin. The texture aliases
+        /// or one whose texels do not fit its bytes. The texture aliases
         /// none of the heap's other resources, where Metal's lies in the heap's bytes.
         HeapDepthStencilApart = "heap-depth-stencil-apart", Precision,
             "the texture's texels lie apart from the heap's bytes: a write through a buffer or \
@@ -1038,8 +1028,8 @@ degradations! {
         /// (never a device's own texture, whose layout nothing shows), on a device whose driver
         /// keeps depth and stencil images GPU-optimized whatever their create info
         /// ([`metal2vulkan::device::DriverFact::DepthStencilImagesStayGpuOptimized`]), that no
-        /// shadow of Metal's tiles in the heap's bytes serves (a multisample texture, a depth twin,
-        /// a format whose layout is not measured; `texture/heap.rs`): Metal lays the texture out
+        /// shadow of Metal's tiles in the heap's bytes serves (a multisample texture, a format
+        /// whose layout is not measured; `texture/heap.rs`): Metal lays the texture out
         /// without its compression metadata, and the runtime's image keeps it.
         OptimizedDepthStencilTexture = "optimized-depth-stencil-texture", Precision,
             "the texture's image keeps the GPU-optimized layout Metal drops with the property \
@@ -1049,8 +1039,7 @@ degradations! {
              answers Metal's own size and alignment for the descriptor wherever the runtime \
              models them, and the larger of the images' and Metal's for a texture whose images \
              need more bytes or a coarser alignment that no shadow of the heap's bytes holds it \
-             to (a depth twin among them), where a heap sized by Metal's answers holds fewer \
-             such textures";
+             to, where a heap sized by Metal's answers holds fewer such textures";
         /// A texture of an IOSurface plane of more than one row under 16 bytes a row
         /// (`Buffer::new_texture_with_iosurface_plane`, `linear_plan.rs`): Metal's GPU writes its
         /// rows 16 bytes apart and reads every row past the first as memory-dependent bytes
@@ -1790,7 +1779,7 @@ degradations! {
         /// which the runtime models (`texture/heap_tiled.rs`), and which no shadow of the
         /// texture's bytes holds it to (`texture/heap::held_to_metal`): not a multisample texture,
         /// whose image lies in memory of its own, nor one whose planes or Metal's tiles fit its
-        /// bytes, and not one held with a depth twin. The answer is then the larger of the two,
+        /// bytes. The answer is then the larger of the two,
         /// since no image binds at Metal's offsets. Every other such texture answers Metal's
         /// numbers and announces nothing here. Not where `optimized-depth-stencil-texture` says
         /// why.

@@ -629,7 +629,6 @@ impl Device {
             views: Mutex::new(KeyMap::default()),
             own_views: Mutex::new(KeyMap::default()),
             resolves: KeptResolves::new(),
-            twin: None,
             decoded: None,
             second: std::sync::OnceLock::new(),
             form: Default::default(),

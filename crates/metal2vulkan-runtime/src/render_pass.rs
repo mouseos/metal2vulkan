@@ -18,10 +18,9 @@
 //!   `Depth32Float`, `Depth16Unorm`, `Stencil8` and `Depth32Float_Stencil8` of shader-read usage
 //!   alone cleared, loaded, drawn and stored as a render target is, and left as they were under a
 //!   `DontCare` store): one texture through a stand-in, separate depth and stencil textures through
-//!   their combined scratch image (`depth_stencil_scratch.rs`). A memoryless one, one whose format
-//!   the device does not copy both ways, and a `Depth32Float` texture held in a color image beside
-//!   its depth twin are not built (`NotImplemented(Render)`). Every attachment has one sample
-//!   count, which the pipelines drawn must have. Metal renders into the smallest attachment's
+//!   their combined scratch image (`depth_stencil_scratch.rs`). A memoryless one, and one whose
+//!   format the device does not copy both ways, are not built (`NotImplemented(Render)`). Every
+//!   attachment has one sample count, which the pipelines drawn must have. Metal renders into the smallest attachment's
 //!   extent, further limited by a nonzero `renderTargetWidth` and `renderTargetHeight` (measured:
 //!   an 8x8 color and a 4x4 depth attachment, or an 8x8 one under a 4x4 target size, render 4x4). A
 //!   pass without attachments needs both target sizes, and rasterizes `defaultRasterSampleCount`
@@ -1876,9 +1875,7 @@ fn target(
     }
     // A view of another format renders in that format (`attachment_format`); a texture without
     // `RenderTarget` usage, through its stand-in, in its own (the module docs), which for a depth
-    // or stencil attachment must hold the aspect: a `Depth32Float` texture held in an
-    // `R32_SFLOAT` image beside a depth twin (`image_plan.rs`) copies into no depth stand-in
-    // exactly.
+    // or stencil attachment must hold the aspect.
     let holds = |format: metal2vulkan::vk::Format| match which {
         Attachment::Color(_) => true,
         Attachment::Depth => format.block().is_some_and(|b| b.depth.is_some()),

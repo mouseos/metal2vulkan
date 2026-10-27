@@ -70,7 +70,6 @@ pub use policy::{
     FloatMathsPolicy,
     HeapCompressionPolicy,
     HostPageTexturePolicy,
-    MultisampleDepthTwinPolicy,
     NanMinMaxPolicy,
     RenderLoweringPolicy,
     RoundingOrderPolicy,

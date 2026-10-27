@@ -223,7 +223,6 @@ impl Texture {
         let facts = device.shared().textures.facts(profile);
         let held = matches!(plan.format, Format::D32_SFLOAT | Format::D32_SFLOAT_S8_UINT)
             && plan.usage.contains(transfer)
-            && image.twin.is_none()
             && self.usage().contains(TextureUsage::RENDER_TARGET)
             && self.storage_mode() != StorageMode::Memoryless
             && !self.is_sparse()

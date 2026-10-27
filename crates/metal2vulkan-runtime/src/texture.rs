@@ -51,14 +51,6 @@
 //!   it from the caller's layout to `GENERAL` and back.
 //! - **Shared textures** (`texture/shared.rs`): a `Private` texture made shareable, whose
 //!   in-process handle opens new textures over the same image.
-//! - **Depth twins**. A `Depth32Float` texture the program only reads or samples, on a device whose
-//!   depth images its driver is not measured to keep every `float` in (without
-//!   `VK_EXT_depth_range_unrestricted`, or keeping a denormal), holds its texels in an
-//!   `R32_SFLOAT` image, which keeps any `float`, and the same texels in a `D32_SFLOAT` twin
-//!   ([`image_plan`](super::image_plan)), which the views a comparison the device makes reads
-//!   present. Every copy
-//!   into the texture writes both (`replace_region`, the blit encoder's copies), and reads come
-//!   from its image; the twin shares the image's resource identity.
 //! - **Not yet:** blits of textures over buffers are refused `NotImplemented`.
 
 use super::address::{ObjectsToken, RangeToken};
@@ -87,8 +79,7 @@ use super::heap::{Heap, HeapProblem, HeapType};
 use super::heap_sets;
 use super::host_bytes::HostBytes;
 use super::image_plan::{
-    check_image_limits, holds_depth_in_colour, plan_image, plan_images, DepthImageFacts,
-    ImageFacts, ImagePlan, ImageRefusal,
+    check_image_limits, plan_image, DepthImageFacts, ImageFacts, ImagePlan, ImageRefusal,
 };
 use super::in_place::{self, PagesClass, Refusal, ShadowCause, Verdict};
 use super::key_hash::KeyMap;
@@ -211,8 +202,6 @@ pub(super) struct TextureState {
     depth_images: DepthImageFacts,
     /// `ImageFacts::linear_attachments`.
     linear_attachments: bool,
-    /// `ImageFacts::multisample_depth_twin`.
-    multisample_depth_twin: bool,
     /// How the runtime places an image in a memory block of its own.
     placement: ImagePlacement,
     /// The verdicts of `generate_mipmaps`' per-format checks (`mipmap.rs`).
@@ -263,19 +252,15 @@ pub(super) struct TextureState {
 
 impl TextureState {
     /// The texture state of a device enabling `description`, whose `bufferImageGranularity` is
-    /// `buffer_image_granularity`, `linearColorAttachment` where `linear_attachments`, and a
-    /// multisampled `Depth32Float` texture held in colour where `multisample_depth_twin`
-    /// (`MultisampleDepthTwinPolicy::Exact`).
+    /// `buffer_image_granularity`, and `linearColorAttachment` where `linear_attachments`.
     pub(super) fn new(
         description: &DeviceDescription,
         buffer_image_granularity: u64,
         linear_attachments: bool,
-        multisample_depth_twin: bool,
     ) -> TextureState {
         TextureState {
             formats: description.formats.clone(),
             linear_attachments,
-            multisample_depth_twin,
             storage_multisample: description.has(VkFeature::ShaderStorageImageMultisample),
             depth_images: DepthImageFacts::of(&description.driver_facts()),
             placement: ImagePlacement::new(
@@ -317,7 +302,6 @@ impl TextureState {
             storage_multisample: self.storage_multisample,
             depth_images: self.depth_images,
             linear_attachments: self.linear_attachments,
-            multisample_depth_twin: self.multisample_depth_twin,
         }
     }
 
@@ -570,9 +554,6 @@ struct Image {
     /// The objects of exact color resolves into the image that its passes made, kept for its next
     /// pass of the same views (`color_resolve.rs`).
     resolves: KeptResolves,
-    /// The image's depth twin: a `D32_SFLOAT` image of the same texels, which the views a
-    /// comparison reads present, for an `R32_SFLOAT` image holding a `Depth32Float` texture.
-    twin: Option<Box<Image>>,
     /// The image's decoded twin (`texture/decoded_twin.rs`): a BC1 to BC5 image's texels as
     /// Metal decodes them, which its sampled views present, on a device whose driver is not
     /// measured to decode them so; an ASTC or PVRTC carrier's.
@@ -1084,7 +1065,7 @@ impl Image {
     }
 
     /// The image, shared (by its texture, or the runtime's holder of it): registered with the
-    /// device's first moves where its move, or its depth twin's, waits (`texture/first_move.rs`).
+    /// device's first moves where its move waits (`texture/first_move.rs`).
     fn shared(self) -> Arc<Image> {
         let image = Arc::new(self);
         if image.move_waits() {
@@ -1100,11 +1081,9 @@ impl Image {
         self.device.shared().textures.first_moves.register(fresh);
     }
 
-    /// Whether its move, or its depth twin's or one of its decoded twins', waits for a
-    /// submission.
+    /// Whether its move, or one of its decoded twins', waits for a submission.
     fn move_waits(&self) -> bool {
         lock(&self.first_move).is_some()
-            || (self.twin.as_ref()).is_some_and(|twin| lock(&twin.first_move).is_some())
             || (self.decoded.as_ref()).is_some_and(|d| lock(&d.image.first_move).is_some())
             || (self.second.get()).is_some_and(|d| lock(&d.image.first_move).is_some())
     }
@@ -1245,7 +1224,7 @@ impl Drop for Image {
         let owned = match &self.owner {
             Owner::Runtime { .. } => Owned::ImageOwnMemory,
             Owner::Buffer { .. } => Owned::ImageInBuffer,
-            Owner::Heap(_) | Owner::HeapTwin => Owned::ImageInHeap,
+            Owner::Heap(_) => Owned::ImageInHeap,
             _ => Owned::ImageOther,
         };
         shared.counts.churn.released(owned);
@@ -1337,11 +1316,6 @@ impl Fresh for Image {
         let own = lock(&self.first_move)
             .take()
             .filter(|first| self.holds(first.image));
-        let twin = (self.twin.as_ref()).and_then(|twin| {
-            lock(&twin.first_move)
-                .take()
-                .filter(|first| twin.holds(first.image))
-        });
         let decoded = (self.decoded.as_deref().into_iter())
             .chain(self.second.get().map(Box::as_ref))
             .filter_map(|decoded| {
@@ -1349,17 +1323,16 @@ impl Fresh for Image {
                     .take()
                     .filter(|first| decoded.image.holds(first.image))
             });
-        own.into_iter().chain(twin).chain(decoded).collect()
+        own.into_iter().chain(decoded).collect()
     }
 
     fn give_back(&self, moves: Vec<FirstMove>) {
         for first in moves {
-            let twin = (self.twin.as_deref()).filter(|twin| twin.raw.get() == first.image);
             let decoded = (self.decoded.as_deref().into_iter())
                 .chain(self.second.get().map(Box::as_ref))
                 .map(|decoded| &decoded.image)
                 .find(|decoded| decoded.raw.get() == first.image);
-            let image = twin.or(decoded).unwrap_or(self);
+            let image = decoded.unwrap_or(self);
             // A rebind may have swapped another `VkImage` in meanwhile, whose move it noted.
             if image.holds(first.image) {
                 let mut waiting = lock(&image.first_move);
@@ -1412,10 +1385,6 @@ pub(super) enum Owner {
     /// the image goes with it, the memory stays the heap's, and an automatic heap takes the range
     /// back.
     Heap(Box<heap::HeapPlace>),
-    /// The runtime made the depth twin of a heap texture in the heap's memory, inside the texture's
-    /// range (`texture/heap.rs`): the image goes with it; the memory and the range are the
-    /// texture's image's.
-    HeapTwin,
     /// The runtime made a heap's depth or stencil image in memory of its own, a shadow of the
     /// heap's bytes in the texture's range (`texture/heap.rs`): the image and its memory go with
     /// it, and an automatic heap takes the range back.
@@ -1459,9 +1428,7 @@ impl Owner {
             Owner::HeapShadow(shadow) => (true, Some(&shadow.placement)),
             Owner::HeapUnaliased(unaliased) => (true, Some(&unaliased.placement)),
             Owner::ViewShadow(shadow) => (true, Some(&shadow.placement)),
-            Owner::Buffer { .. } | Owner::Sparse(_) | Owner::Heap(_) | Owner::HeapTwin => {
-                (true, None)
-            }
+            Owner::Buffer { .. } | Owner::Sparse(_) | Owner::Heap(_) => (true, None),
             Owner::Caller(_) => (false, None),
         }
     }
@@ -1520,17 +1487,15 @@ fn image_error(call: &'static str, refusal: ImageRefusal) -> Error {
     }
 }
 
-/// `plan`, the image of a texture of `layout` and Metal `usage` (with a depth twin where `twin`),
-/// with the storage usage a texture without `ShaderWrite` or `ShaderAtomic` lacks, and the
+/// `plan`, the image of a texture of `layout` and Metal `usage`, with the storage usage a texture without `ShaderWrite` or `ShaderAtomic` lacks, and the
 /// sampled usage one without `ShaderRead` lacks, each where `take` takes it: the candidate is the
 /// image the texture with the usage would have, offered (`take(plan, candidate)`, which answers
-/// the plan to go on with) only where it keeps the image's format and twin and has every usage
-/// `plan` has. Plain Metal writes and reads such a texture (`Device::with_undeclared_usage`).
+/// the plan to go on with) only where it keeps the image's format and has every usage `plan` has.
+/// Plain Metal writes and reads such a texture (`Device::with_undeclared_usage`).
 fn undeclared_usage(
     mut plan: ImagePlan,
     layout: &TextureLayout,
     usage: TextureUsage,
-    twin: bool,
     facts: &ImageFacts<'_>,
     mut take: impl FnMut(ImagePlan, ImagePlan) -> Result<ImagePlan, Error>,
 ) -> Result<ImagePlan, Error> {
@@ -1551,14 +1516,10 @@ fn undeclared_usage(
             continue;
         }
         // A texture over memory it is given takes the usage too, of a padded format among them.
-        let Ok((candidate, candidate_twin)) = plan_images(layout, usage | metal, false, facts)
-        else {
+        let Ok(candidate) = plan_image(layout, usage | metal, false, facts) else {
             continue;
         };
-        if candidate.format != plan.format
-            || candidate_twin.is_some() != twin
-            || !candidate.usage.contains(vk | plan.usage)
-        {
+        if candidate.format != plan.format || !candidate.usage.contains(vk | plan.usage) {
             continue;
         }
         plan = take(plan, candidate)?;
@@ -1733,12 +1694,8 @@ impl Device {
             .shared()
             .textures
             .facts(self.compile_device().profile());
-        let (mut plan, twin) = plan_images(&layout, descriptor.image_usage(), false, &facts)
+        let mut plan = plan_image(&layout, descriptor.image_usage(), false, &facts)
             .map_err(|refusal| image_error(call, refusal))?;
-        if twin.is_some() {
-            // A depth twin would need its own memory bound alike.
-            return Err(Error::NotImplemented(RuntimeGap::SparseHeaps));
-        }
         // An ASTC, ETC2, EAC or 4:2:2 carrier's samples read a decoded twin, which tiles GPU
         // commands map would leave behind (`astc.rs`, `etc.rs`, `chroma_pairs.rs`).
         if super::astc::decode_of(&plan).is_some()
@@ -1912,7 +1869,6 @@ impl Device {
             views: Mutex::new(KeyMap::default()),
             own_views: Mutex::new(KeyMap::default()),
             resolves: KeptResolves::new(),
-            twin: None,
             decoded: None,
             second: OnceLock::new(),
             form: Default::default(),
@@ -2041,7 +1997,6 @@ impl Device {
             views: Mutex::new(KeyMap::default()),
             own_views: Mutex::new(KeyMap::default()),
             resolves: KeptResolves::new(),
-            twin: None,
             decoded: None,
             second: OnceLock::new(),
             form: Default::default(),
@@ -2081,23 +2036,21 @@ impl Device {
         tile_map.buffer.fill_first_from(staging, length)
     }
 
-    /// `plan`, the image of a texture of `layout` and Metal `usage` (with a depth twin where
-    /// `twin`), with the storage usage a texture without `ShaderWrite` or `ShaderAtomic` lacks,
-    /// and the sampled usage one without `ShaderRead` lacks, each where it costs the image
+    /// `plan`, the image of a texture of `layout` and Metal `usage`, with the storage usage a
+    /// texture without `ShaderWrite` or `ShaderAtomic` lacks, and the sampled usage one without `ShaderRead` lacks, each where it costs the image
     /// nothing (`if_free`: the same memory size and alignment): plain Metal writes and reads such
     /// a texture (an M4 under macOS 27.0.1; its validation stops them), and a valid program's
     /// texture keeps its compression. The candidate is the image the texture with the usage would
-    /// have, taken only where it keeps the image's format and twin; elsewhere a binding that needs
+    /// have, taken only where it keeps the image's format; elsewhere a binding that needs
     /// the usage is the runtime's gap (`Feature::UndeclaredTextureUsage`, `binding_view`).
     fn with_undeclared_usage(
         &self,
         plan: ImagePlan,
         layout: &TextureLayout,
         usage: TextureUsage,
-        twin: bool,
         facts: &ImageFacts<'_>,
     ) -> Result<ImagePlan, Error> {
-        undeclared_usage(plan, layout, usage, twin, facts, |plan, candidate| {
+        undeclared_usage(plan, layout, usage, facts, |plan, candidate| {
             self.if_free(plan, candidate, layout.texture_type)
         })
     }
@@ -2152,38 +2105,27 @@ impl Device {
             .textures
             .facts(self.compile_device().profile());
         let mut usage = descriptor.own_image_usage();
-        let (mut plan, mut twin) = plan_images(&layout, usage, memoryless, &facts)
+        let mut plan = plan_image(&layout, usage, memoryless, &facts)
             .map_err(|refusal| image_error(call, refusal))?;
         // An image whose copies would rewrite texels Metal keeps is made uncompressed.
         if let Some(exact) = self.copy_exact_usage(descriptor, &layout, plan.format, usage) {
             usage = exact;
-            (plan, twin) = plan_images(&layout, usage, memoryless, &facts)
+            plan = plan_image(&layout, usage, memoryless, &facts)
                 .map_err(|refusal| image_error(call, refusal))?;
         }
         let plan = match memoryless {
             true => plan,
-            false => self.with_undeclared_usage(plan, &layout, usage, twin.is_some(), &facts)?,
+            false => self.with_undeclared_usage(plan, &layout, usage, &facts)?,
         };
         let plan = self.with_free_usage(plan, layout.texture_type)?;
-        let mut image = self.new_texture_image(plan, &layout, descriptor, hazard)?;
+        let image = self.new_texture_image(plan, &layout, descriptor, hazard)?;
         // A multisampled depth the device renders faster out of `GENERAL` rests in the attachment
         // layout between the passes that hold it (`texture/held_depth.rs`).
         let private = storage == StorageMode::Private;
-        if private && twin.is_none() && held_depth::eligible(self, &image.plan) {
+        if private && held_depth::eligible(self, &image.plan) {
             let raw = image.raw.get();
             let held = held_depth::HeldImage::of_plan(image.identity.key, raw, &image.plan);
             self.shared().textures.held.insert(held);
-        }
-        if let Some(twin) = twin {
-            let twin = self.new_texture_image(twin, &layout, descriptor, hazard)?;
-            image.twin = Some(Box::new(twin));
-            self.degrade_depth_twin(&layout, &facts, true);
-        } else if image.plan.pixel_format == PixelFormat::Depth32Float
-            && image.plan.format == Format::R32_SFLOAT
-        {
-            // A multisampled `Depth32Float` texture held in colour, with no twin beside it
-            // (`MultisampleDepthTwinPolicy::Exact`).
-            self.degrade_depth_twin(&layout, &facts, false);
         }
         let image = match memoryless {
             true => {
@@ -2319,8 +2261,7 @@ impl Device {
                 // compressed, and its memory is the buffer's, so the usage costs it nothing.
                 // Else the image without it, and else the shadow, with it where that costs the
                 // shadow nothing.
-                let wider =
-                    undeclared_usage(plan.clone(), layout, usage, false, &facts, |_, w| Ok(w))?;
+                let wider = undeclared_usage(plan.clone(), layout, usage, &facts, |_, w| Ok(w))?;
                 // The plans a linear image aliasing the bytes is tried with, the first the device
                 // makes: with the feedback loop usage a draw takes that reads the texture its own
                 // pass renders through a snapshot (`feedback_candidate`,
@@ -2356,7 +2297,7 @@ impl Device {
                 }
             }
         };
-        let plan = self.with_undeclared_usage(plan, layout, usage, false, &facts)?;
+        let plan = self.with_undeclared_usage(plan, layout, usage, &facts)?;
         if !plan
             .usage
             .contains(ImageUsageFlags::TRANSFER_SRC | ImageUsageFlags::TRANSFER_DST)
@@ -2721,7 +2662,6 @@ impl Device {
             views: Mutex::new(KeyMap::default()),
             own_views: Mutex::new(KeyMap::default()),
             resolves: KeptResolves::new(),
-            twin: None,
             decoded: None,
             second: OnceLock::new(),
             form: Default::default(),
@@ -2770,7 +2710,6 @@ impl Device {
             views: Mutex::new(KeyMap::default()),
             own_views: Mutex::new(KeyMap::default()),
             resolves: KeptResolves::new(),
-            twin: None,
             decoded: None,
             second: OnceLock::new(),
             form: Default::default(),
@@ -3175,7 +3114,6 @@ impl Device {
             views: Mutex::new(KeyMap::default()),
             own_views: Mutex::new(KeyMap::default()),
             resolves: KeptResolves::new(),
-            twin: None,
             decoded: None,
             second: OnceLock::new(),
             form: Default::default(),
@@ -3435,8 +3373,7 @@ impl Device {
     /// (`heap_tiled::fresh_pattern`, all ones) exactly into an image of `format`: each of the
     /// image's copy units is a stencil one, a depth one of `pf`'s depth bytes (a 32-bit float
     /// depth on a device whose depth images keep a copied value outside `[0, 1]`,
-    /// `ImageFacts::depth_clamps`; its NaN too), or a colour one of them (a depth twin's
-    /// `R32_SFLOAT` image).
+    /// `ImageFacts::depth_clamps`; its NaN too).
     fn ones_write(&self, format: Format, pf: PixelFormat) -> bool {
         let facts = self
             .shared()
@@ -3456,7 +3393,6 @@ impl Device {
                         ImageAspectFlags::DEPTH => {
                             bytes == depth && (depth == 2 || !facts.depth_clamps())
                         }
-                        ImageAspectFlags::COLOR => bytes == depth,
                         _ => false,
                     }
             })
@@ -3535,34 +3471,6 @@ impl Device {
 }
 
 impl Device {
-    /// Announce `depth-twin` for a texture of `layout` whose texels are held in an `R32_SFLOAT`
-    /// image on a device with `facts`: why the texture is
-    /// (`plan_depth_twin` and `holds_multisample_depth_in_colour` hold the texels there only
-    /// where the facts state a loss), and, where `twin`, that a comparison reads the `D32_SFLOAT`
-    /// twin beside it. A multisampled texture has no twin: Metal reads a `depth2d_ms` and
-    /// compares nothing.
-    pub(super) fn degrade_depth_twin(
-        &self,
-        layout: &TextureLayout,
-        facts: &ImageFacts<'_>,
-        twin: bool,
-    ) {
-        let loss = facts.depth_loss().unwrap_or_default();
-        self.degrade(Degradation::DepthTwin, || {
-            let [width, height, depth] = layout.extent;
-            let object = format!(
-                "{:?} {:?} texture of {width}x{height}x{depth}",
-                layout.pixel_format, layout.texture_type
-            );
-            let compared = match twin {
-                true => ", and the comparisons the device makes read a D32_SFLOAT twin",
-                false => ", which every read of it reads",
-            };
-            let why = format!("{loss}: its texels are held in an R32_SFLOAT image{compared}");
-            (object, why)
-        });
-    }
-
     /// Announce `compressed-texel-decode` for a texture of `layout` in a BC format made on a
     /// device whose driver is not measured to decode its texels as Metal does (the format's
     /// [`block_decode_fact`]).
@@ -3651,8 +3559,7 @@ impl Heap {
     /// a multiple of [`Device::heap_texture_size_and_align`]'s alignment, taking that call's size
     /// of the heap, its bytes the heap's memory as they are; its options are the heap's (a tracking
     /// mode named other than the heap's becomes the heap's, as plain Metal makes it). A texture
-    /// buffer is a buffer of the heap's there with the texture over its bytes, and a texture the
-    /// device holds with a depth twin takes the twin's bytes too. Refused: what
+    /// buffer is a buffer of the heap's there with the texture over its bytes. Refused: what
     /// `heap_texture_size_and_align` refuses; a storage or CPU cache mode other than the heap's
     /// (`Invalid`, as Metal ends the process); a heap whose memory the image cannot lie in
     /// (`NotImplemented(HeapTextureMemory)`); no room (`OutOfMemory(Heap)`).
@@ -3690,8 +3597,7 @@ impl Heap {
     /// refuses); a texture whose unmapped texels the runtime cannot zero: a single-sampled one of a
     /// format the device copies nothing into, a multisampled one of a format it does not clear and
     /// render (`NotImplemented(SparseTileMaps)`), or past its framebuffers
-    /// (`Unsupported(Feature::RenderTargetSize)`); a `Depth32Float` texture that would need a depth twin
-    /// (`NotImplemented(SparseHeaps)`); a two-plane extended-range format (`RGB10A8_2P_XR10` and
+    /// (`Unsupported(Feature::RenderTargetSize)`); a two-plane extended-range format (`RGB10A8_2P_XR10` and
     /// its twin, `NotImplemented(Format)`).
     ///
     /// Refused for a placement heap, whose textures take an offset (`Invalid`, as for its
@@ -4032,18 +3938,6 @@ pub(super) fn transfer_barrier(
             &[],
             &[],
         );
-    }
-}
-
-/// `copy`, a copy between a buffer and the `R32_SFLOAT` image of a texture with a depth twin,
-/// as the twin takes it: the same texels in its depth aspect.
-pub(super) fn twin_copy(copy: vk::BufferImageCopy) -> vk::BufferImageCopy {
-    vk::BufferImageCopy {
-        image_subresource: vk::ImageSubresourceLayers {
-            aspect_mask: vk::ImageAspectFlags::DEPTH,
-            ..copy.image_subresource
-        },
-        ..copy
     }
 }
 
@@ -4454,13 +4348,6 @@ impl Texture {
         Ok(image.linear && lock(&image.detached).is_none())
     }
 
-    /// The plan of the image holding the texture's texels in its format's aspects: its depth
-    /// twin's for a texture with one, else its image's. Refused as [`image`](Self::image) is.
-    pub(super) fn depth_plan(&self) -> Result<&ImagePlan, Error> {
-        let image = self.image()?;
-        Ok(image.twin.as_ref().map_or(image.plan(), |twin| twin.plan()))
-    }
-
     /// The bytes of device memory the runtime placed the texture's image in: `None` for an image
     /// in a buffer's, a heap's or the caller's memory, a sparse image (bound by unit), and where
     /// [`image`](Self::image) refuses. A shadowed view's image is in memory of its own
@@ -4473,7 +4360,6 @@ impl Texture {
             | Owner::Caller(_)
             | Owner::Sparse(_)
             | Owner::Heap(_)
-            | Owner::HeapTwin
             | Owner::HeapShadow(_)
             | Owner::HeapUnaliased(_) => None,
         }
@@ -4507,20 +4393,6 @@ impl Texture {
         Ok(self.image()?.raw.get())
     }
 
-    /// Whether the texture's texels are in a colour image: a `Depth32Float` texture held in
-    /// `R32_SFLOAT`, which keeps every `float` a copy writes where the device's depth images may
-    /// not ([`holds_depth_in_colour`] for which plans those are). `false` for every other
-    /// texture.
-    pub(super) fn holds_depth_in_colour(&self) -> bool {
-        self.image()
-            .is_ok_and(|image| holds_depth_in_colour(image.plan()))
-    }
-
-    /// The `VkImage` of the texture's depth twin, or `None` for a texture without one.
-    pub(super) fn twin_image(&self) -> Option<vk::Image> {
-        Some(self.image().ok()?.twin.as_ref()?.raw.get())
-    }
-
     /// Announce what `call`'s upload into `aspect` of the texture's image may store otherwise than
     /// Metal's, in the depth of a 32-bit float depth image: on a device without
     /// `VK_EXT_depth_range_unrestricted` enabled whose driver is not measured to keep a value
@@ -4529,8 +4401,7 @@ impl Texture {
     /// depth, which a depth test reads, switches it on to render over its magnitude stand-in, so
     /// the device's test answers as Metal's, which compares the value's magnitude
     /// (`texture/signed_depth.rs`; `encoding` where a command buffer of the program's records the
-    /// upload); a target that takes no stand-in announces `signed-depth-test`. A texture with a
-    /// depth twin holds its texels in colour (its twin's clamping is announced with the twin).
+    /// upload); a target that takes no stand-in announces `signed-depth-test`.
     pub(super) fn degrade_depth_upload(
         &self,
         call: &'static str,
@@ -4625,7 +4496,7 @@ impl Texture {
     /// Announce `depth-denormals` for `call`'s write into `aspect` of the texture's image that may
     /// store a denormal (`on_host`: by a host copy): the 32-bit float depth of a depth image, on
     /// a device whose driver may store it or test it otherwise than Metal's
-    /// ([`ImageFacts::denormal_loss`]). A texture with a depth twin holds its texels in colour.
+    /// ([`ImageFacts::denormal_loss`]).
     /// Where the driver stores it and only its depth test compares it otherwise, a render target
     /// that takes a magnitude stand-in is switched on (`texture/signed_depth.rs`, `encoding` as
     /// [`degrade_depth_upload`](Self::degrade_depth_upload) takes it): its passes test the
@@ -4687,19 +4558,12 @@ impl Texture {
         desc: &ImageViewDesc,
         storage: bool,
     ) -> Result<vk::ImageView, Error> {
-        let mut image: &Image = self.image()?;
+        let image: &Image = self.image()?;
         // A sampled view of a texture with a decoded twin presents the twin.
         if !storage {
             if let Some(view) = self.decoded_view(call, image, desc)? {
                 return Ok(view);
             }
-        }
-        // A view a comparison reads presents the texture's depth twin.
-        if desc.twin {
-            image = image
-                .twin
-                .as_deref()
-                .ok_or_else(|| internal("a depth twin's view of a texture without one"))?;
         }
         let view = binding_view(image.plan(), &self.0.record.bound(), desc, storage)
             .map_err(|refusal| view_error(call, refusal))?;
@@ -4730,12 +4594,6 @@ impl Texture {
     pub(super) fn worked_out_facts(&self) -> TextureFacts {
         let record = self.0.record.bound();
         let mut facts = texture_facts(&record);
-        // A `Depth32Float` texture whose texels are in an `R32_SFLOAT` image: a sampled view
-        // reads the colour image, and a compared one the depth twin a single-sampled one has
-        // beside it (`image_plan::plan_depth_twin`). A multisampled one has no twin and no
-        // comparison to serve: Metal reads a `depth2d_ms` and compares nothing
-        // (`MultisampleDepthTwinPolicy::Exact`).
-        facts.depth_twin = self.holds_depth_in_colour();
         facts.sparse = self.is_sparse();
         // A two-plane YCbCr texture whose planes a function may read in place.
         facts.ycbcr_in_place = self.0.planes_in_place.map(|p| p.words);
@@ -5474,9 +5332,7 @@ impl Texture {
     /// `VK_EXT_depth_range_unrestricted` Vulkan leaves a copied value outside `[0, 1]` undefined
     /// (`VUID-vkCmdCopyBufferToImage-pRegions-07931`), and a device may store such a value clamped:
     /// an upload into a depth image there announces `restricted-depth-upload` unless the device's
-    /// driver is measured to keep it (`DriverFact::DepthImageKeepsValuesOutsideUnitRange`). A
-    /// texture with a depth twin keeps it: its image is `R32_SFLOAT`, and its twin, which its
-    /// comparisons read, takes the same bytes.
+    /// driver is measured to keep it (`DriverFact::DepthImageKeepsValuesOutsideUnitRange`).
     pub fn replace_region(
         &self,
         region: Region,
@@ -5648,11 +5504,7 @@ impl Texture {
                 buffer_offset: copy.buffer_offset + start,
                 ..copy
             };
-            let mut copies = vec![(truth.raw.get(), copy)];
-            // The depth twin takes the same texels.
-            if let Some(twin) = self.twin_image() {
-                copies.push((twin, twin_copy(copy)));
-            }
+            let copies = vec![(truth.raw.get(), copy)];
             let staged = TexelCopy::new(source, host.packed_len(), copies, Box::new(staging));
             // The decoded twin's texels of the region, after the copy.
             let regions = std::slice::from_ref(&image_region);
@@ -5674,7 +5526,7 @@ impl Texture {
         bytes.pack(&host, packed);
         // As above: the copy below writes the image these bytes.
         truth.shadow_written(&image_region, &unit, packed);
-        let (buffer, twin, image) = (staging.raw, self.twin_image(), truth.raw.get());
+        let (buffer, image) = (staging.raw, truth.raw.get());
         // The decoded twin's texels of the region, after the copy; the submission is waited for.
         let decode = truth.decode_pass(std::slice::from_ref(&image_region), PassScratch::Own)?;
         truth.submit_copy(|raw, command_buffer| {
@@ -5689,16 +5541,6 @@ impl Texture {
                     vk::ImageLayout::GENERAL,
                     &[copy],
                 );
-                // The depth twin takes the same texels.
-                if let Some(twin) = twin {
-                    raw.cmd_copy_buffer_to_image(
-                        command_buffer,
-                        buffer,
-                        twin,
-                        vk::ImageLayout::GENERAL,
-                        &[twin_copy(copy)],
-                    );
-                }
             }
             transfer_barrier(raw, command_buffer, false);
             if let Some(decode) = &decode {

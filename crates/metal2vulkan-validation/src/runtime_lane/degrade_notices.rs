@@ -28,9 +28,8 @@
 //! resource IDs ([`UNLISTED`]),
 //! indirect command buffers' commands naming a released state ([`RELEASED_STATES`]) and their host
 //! steps ([`HOST_STEPS`]), indirect dispatches' host reads ([`INDIRECT_DISPATCHES`]), indexed draws
-//! past their index buffer ([`INDEX_FETCHES`]), depth twins ([`TWINS`]) and uploads into depth
-//! images ([`UPLOADS`]), a MoltenVK whose
-//! argument-buffer state is unread ([`ARGUMENT_BUFFERS`]), mipmaps within Metal's
+//! past their index buffer ([`INDEX_FETCHES`]), uploads into depth images ([`UPLOADS`]), a
+//! MoltenVK whose argument-buffer state is unread ([`ARGUMENT_BUFFERS`]), mipmaps within Metal's
 //! spread ([`MIPMAPS`]), a heap's depth or stencil texture laid apart from the heap ([`APART`]),
 //! a multisample depth or stencil texture without GPU-optimized contents that stays optimized
 //! ([`OPTIMIZED`]),
@@ -140,8 +139,7 @@
 //! where the compile layer runs the dispatch on no emulated variant, a one-aspect resolve where the
 //! device resolves the aspects independently, both properties no device option withholds,
 //! uncalibrated GPU times where the device calibrates its timestamps, an unlisted sampler state
-//! where the device's and the pipeline's sampler arrays hold its ID, a depth twin where the
-//! device's depth images keep every `float`, an upload into a depth image where the device enabled
+//! where the device's and the pipeline's sampler arrays hold its ID, an upload into a depth image where the device enabled
 //! `VK_EXT_depth_range_unrestricted` or its driver keeps a value outside `[0, 1]` without it, and a
 //! `Shared` buffer in system memory where the device has unified memory, a heap's depth or stencil
 //! texture where the driver lays no such image apart, and a depth or stencil texture without
@@ -212,7 +210,7 @@ use super::sample_copies::DRAWN_DEPTH;
 use super::shader_stencil::SHADOW;
 use super::snorm_tile_store::{SHARED_EXPONENT, SNORM_MINIMUM};
 use super::sparse_textures::SPARSE;
-use super::texture_blits::{MIPMAPS, TWINS, UPLOADS};
+use super::texture_blits::{MIPMAPS, UPLOADS};
 use super::tile_dispatches::TILE_DISPATCHES;
 use super::topology_classes::UNSIZED_POINTS;
 use super::two_plane_copies::TWO_PLANE_COPIES;
@@ -495,7 +493,6 @@ fn every_kind_has_a_site_a_lane_test_takes() {
         &HOST_STEPS,
         &INDIRECT_DISPATCHES,
         &INDEX_FETCHES,
-        &TWINS,
         &UPLOADS,
         &MIPMAPS,
         &APART,
@@ -2125,18 +2122,6 @@ pub(super) fn signs_depth_tests(device: &Device) -> bool {
 /// default CPU cache mode a test makes: it has no unified memory (`blits::SYSTEM_MEMORY`).
 pub(super) fn shared_in_system_memory(device: &Device) -> bool {
     !device.properties().has_unified_memory
-}
-
-/// Whether `device` gives a single-sample `Depth32Float` texture of shader-read usage without
-/// render target usage a depth twin (`depth-twin`): its depth images may store a value otherwise
-/// than Metal's ([`clamps_depth_uploads`], or a driver not measured to keep a denormal there,
-/// `DriverFact::DepthImageKeepsDenormals`).
-pub(super) fn twins_depth(device: &Device) -> bool {
-    let keeps = device
-        .properties()
-        .driver_facts
-        .contains(&DriverFact::DepthImageKeepsDenormals);
-    clamps_depth_uploads(device) || !keeps
 }
 
 /// The kind `device` announces for a resolve of a color attachment of a format that is not

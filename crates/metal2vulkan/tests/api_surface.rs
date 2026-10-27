@@ -232,7 +232,6 @@ surface! {
         enum VertexNormalizedPolicy N;
         enum NanMinMaxPolicy N;
         enum RoundingOrderPolicy N;
-        enum MultisampleDepthTwinPolicy N;
         enum DecodedTexelsPolicy N;
         enum HeapCompressionPolicy N;
         enum CompletionPolicy N;
