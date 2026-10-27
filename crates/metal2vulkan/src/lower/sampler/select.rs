@@ -2466,8 +2466,8 @@ fn clamps_reference(
 ///   device's. A 2D gather snaps behind the word on every device. A sample (a comparison's
 ///   included) reads the texel's centre where the word states one texel ([`Sampling::centre_word`]:
 ///   every pixel word for an integer texture); otherwise it snaps onto its footprint cell where the
-///   word's two filters are linear and Metal's own sampler filters it, leaving a word of mixed
-///   filters to the device; without the cell the device filters. Metal admits a pixel sampler only
+///   word's two filters are linear, on every device, leaving a word of mixed filters to the
+///   device; without the cell the device filters. Metal admits a pixel sampler only
 ///   without a mip filter and isotropic (`runtime::sampler::check_descriptor`), so its word filters
 ///   exactly where a min or mag filter is linear. Any other sampling (an LOD query) is the
 ///   device's.

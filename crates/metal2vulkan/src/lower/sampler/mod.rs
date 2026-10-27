@@ -1110,13 +1110,12 @@ pub struct RuntimeSlot {
     /// A 2D gather snaps behind its word (`position::SnapKind::WordGather`): the function reads its
     /// word's coordinates and its `s` and `t` address modes.
     pub gathers: bool,
-    /// A sample on a device with Metal's own sampler snaps onto its footprint cell behind its
-    /// word (`position::SnapKind::WordCell`): the function reads whether its word states a linear
-    /// pixel sampler.
+    /// A sample snaps onto its footprint cell behind its word (`position::SnapKind::WordCell`):
+    /// the function reads whether its word states a linear pixel sampler.
     pub cells: bool,
-    /// A sample's `float` or `half` texel converts by the bound format's class where the sampler
-    /// reads one texel of one level (`texture::OneTexel::Word`): the function reads its word's
-    /// filter fields.
+    /// A sample's `half` texel converts by the bound format's class where the sampler reads one
+    /// texel of one level (`texture::OneTexel::Word`), on a device that samples through Metal's
+    /// own sampler (`VkProperty::MetalSampler`): the function reads its word's filter fields.
     pub texels: bool,
     /// A clamped LOD query outside a fragment function reads it ([`SampleOp::QueryLevel`]), or an
     /// extended-range sample whose linear mip filter blends two levels (`extended::Level::Word`):

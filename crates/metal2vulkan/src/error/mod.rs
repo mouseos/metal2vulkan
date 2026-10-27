@@ -1660,9 +1660,10 @@ pub enum RuntimeInput {
     TessellationDescriptor,
     /// A fragment function writes a color attachment whose format converts its float output (a
     /// normalized, sRGB or half-float format) and was compiled for other attachments, another
-    /// blend state, or another device's conversion: how it rounds each such output
-    /// (`LoweringInputs::color_writes`) is not the pipeline's. It is compiled for the pipeline
-    /// again.
+    /// blend state, or another device's conversion: its map of how each such output reaches the
+    /// attachment (`LoweringInputs::color_writes`: which conversion records a note, and a
+    /// half-float channel's rounding under `TextureWriteRoundingMode::NearestEven`) is not the
+    /// pipeline's. It is compiled for the pipeline again.
     ColorWrites,
     /// A call to a function, or a use of a variable, that the stage's module imports from a
     /// dynamic library (a declaration its `air.dyld_flat_table` names) survived specialization,
