@@ -1011,7 +1011,9 @@ assert_eq!(linked, pipeline);
 ```
 
 - A compiled function states before linking what its stage will: `stage()`, `requirements()`
-  (check it against another profile with `DeviceProfile::check`), `precision_notes()`,
+  (check it against another profile with `DeviceProfile::check`), `precision_notes()` (the
+  pipeline's stage adds those of its own state: a fragment stage's attachment writes, a vertex
+  stage's formats its fixed-function vertex input converts),
   `reconvergence()`, `required_subgroup_size()`, `requires_full_subgroups()`, `module_stats()`
   (section 3) and `writes_memory()` (stores or atomics, which a render pipeline drawn in more than
   one color group refuses).
