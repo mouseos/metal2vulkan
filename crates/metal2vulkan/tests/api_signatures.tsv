@@ -1455,7 +1455,6 @@ enum	metal2vulkan::device::DriverFact	#[derive(Clone, Copy, Debug, PartialEq, Eq
 enum	metal2vulkan::device::DriverWorkaround	#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)] #[non_exhaustive] pub enum DriverWorkaround
 enum	metal2vulkan::device::Exposure	#[derive(Clone, Copy, Debug, PartialEq, Eq)] #[non_exhaustive] pub enum Exposure
 enum	metal2vulkan::device::FloatControl	#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)] #[non_exhaustive] pub enum FloatControl
-enum	metal2vulkan::device::FloatMathsPolicy	#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))] #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)] #[non_exhaustive] pub enum FloatMathsPolicy
 enum	metal2vulkan::device::FloatWidth	#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)] #[non_exhaustive] pub enum FloatWidth
 enum	metal2vulkan::device::FormatUsage	#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)] #[non_exhaustive] pub enum FormatUsage
 enum	metal2vulkan::device::FunctionStorage	#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)] #[non_exhaustive] pub enum FunctionStorage
@@ -1469,7 +1468,6 @@ enum	metal2vulkan::device::PointerDomain	#[cfg_attr(feature = "serde", derive(se
 enum	metal2vulkan::device::RenderLoweringPolicy	#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))] #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)] #[non_exhaustive] pub enum RenderLoweringPolicy
 enum	metal2vulkan::device::ResolveMode	#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)] #[non_exhaustive] pub enum ResolveMode
 enum	metal2vulkan::device::Robustness	#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)] #[non_exhaustive] pub enum Robustness
-enum	metal2vulkan::device::RoundingOrderPolicy	#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))] #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)] #[non_exhaustive] pub enum RoundingOrderPolicy
 enum	metal2vulkan::device::SamplingPolicy	#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))] #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)] #[non_exhaustive] pub enum SamplingPolicy
 enum	metal2vulkan::device::SimdClass	#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)] #[non_exhaustive] pub enum SimdClass
 enum	metal2vulkan::device::SpirvExtension	#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)] #[non_exhaustive] pub enum SpirvExtension
@@ -12472,8 +12470,6 @@ variant	metal2vulkan::device::FloatControl::DenormPreserve	DenormPreserve
 variant	metal2vulkan::device::FloatControl::RoundingModeRte	RoundingModeRte
 variant	metal2vulkan::device::FloatControl::RoundingModeRtz	RoundingModeRtz
 variant	metal2vulkan::device::FloatControl::SignedZeroInfNanPreserve	SignedZeroInfNanPreserve
-variant	metal2vulkan::device::FloatMathsPolicy::Exact	Exact
-variant	metal2vulkan::device::FloatMathsPolicy::Native	Native
 variant	metal2vulkan::device::FloatWidth::F16	F16
 variant	metal2vulkan::device::FloatWidth::F32	F32
 variant	metal2vulkan::device::FloatWidth::F64	F64
@@ -12517,8 +12513,6 @@ variant	metal2vulkan::device::ResolveMode::SampleZero	SampleZero
 variant	metal2vulkan::device::Robustness::None	None
 variant	metal2vulkan::device::Robustness::Rba	Rba
 variant	metal2vulkan::device::Robustness::Rba2	Rba2
-variant	metal2vulkan::device::RoundingOrderPolicy::Exact	Exact
-variant	metal2vulkan::device::RoundingOrderPolicy::Native	Native
 variant	metal2vulkan::device::SamplingPolicy::Exact	Exact
 variant	metal2vulkan::device::SamplingPolicy::NativeDevice	NativeDevice
 variant	metal2vulkan::device::SimdClass::CrossLane	CrossLane(OpBits)
