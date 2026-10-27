@@ -308,11 +308,11 @@ fn below_1_2_and_contradictory_policies_are_refused() {
 
 /// Each of the policy's choices between the device's answer and Metal's, with a function that
 /// flips it alone: the maths functions, the texel conversions, a normalized vertex attribute's
-/// conversion, the `half` rounding, the NaN and minimum and maximum, the rounding order, the
-/// 16-bit float blend of a `half` output, and the filter of a two-plane YCbCr texture.
-fn exactness_flips() -> [(&'static str, fn(DevicePolicy) -> DevicePolicy); 8] {
+/// conversion, the `half` rounding, the NaN and minimum and maximum, the rounding order, and the
+/// filter of a two-plane YCbCr texture.
+fn exactness_flips() -> [(&'static str, fn(DevicePolicy) -> DevicePolicy); 7] {
     use crate::device::{
-        FloatMathsPolicy as F, HalfBlendPolicy as B, HalfRoundingPolicy as H, NanMinMaxPolicy as N,
+        FloatMathsPolicy as F, HalfRoundingPolicy as H, NanMinMaxPolicy as N,
         RoundingOrderPolicy as R, TexelConversionPolicy as T, VertexNormalizedPolicy as V,
         YCbCrFilterPolicy as Y,
     };
@@ -359,13 +359,6 @@ fn exactness_flips() -> [(&'static str, fn(DevicePolicy) -> DevicePolicy); 8] {
             },
             ..p
         }),
-        ("half_blend", |p| DevicePolicy {
-            half_blend: match p.half_blend {
-                B::Device => B::Exact,
-                B::Exact => B::Device,
-            },
-            ..p
-        }),
         ("ycbcr_filter", |p| DevicePolicy {
             ycbcr_filter: match p.ycbcr_filter {
                 Y::Device => Y::Exact,
@@ -379,8 +372,7 @@ fn exactness_flips() -> [(&'static str, fn(DevicePolicy) -> DevicePolicy); 8] {
 /// On MoltenVK on the M3, whose functions, NaN, minimum and maximum and `half` rounding are
 /// measured to be Metal's, the maths functions', the `half` rounding's and the rounding order's
 /// choices change nothing, so each keys as the default does; the texel conversions' is the
-/// policy's own field there, as the 16-bit float blend's is (MoltenVK's blend is measured to store
-/// Metal's bytes, but no profile fact states it), the NaN and minimum and maximum's moves the texel
+/// policy's own field there, the NaN and minimum and maximum's moves the texel
 /// NaN route (`TexelNanRoute`): a texel's NaN is the image's decode, which no arithmetic fact
 /// covers, and the YCbCr filter's moves whether a two-plane YCbCr slot takes its variant
 /// (`ProfileFields::ycbcr_variant`), Metal's sampler filtering such a texture's converted texels
@@ -400,11 +392,7 @@ fn metal_s_own_answers_key_the_same_under_either_choice() {
             fp(flip(base)) == fp(base),
             !matches!(
                 name,
-                "texel_conversion"
-                    | "vertex_normalized"
-                    | "half_blend"
-                    | "nan_and_min_max"
-                    | "ycbcr_filter"
+                "texel_conversion" | "vertex_normalized" | "nan_and_min_max" | "ycbcr_filter"
             ),
             "{name}"
         );

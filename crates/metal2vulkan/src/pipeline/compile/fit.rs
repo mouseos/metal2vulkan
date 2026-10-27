@@ -13,8 +13,8 @@
 use crate::budget::{Budget, Meter};
 use crate::cache::VariantKey;
 use crate::device::policy::{
-    DevicePolicy, FloatMathsPolicy, HalfBlendPolicy, HalfRoundingPolicy, NanMinMaxPolicy,
-    RoundingOrderPolicy, SamplingPolicy, TexelConversionPolicy, YCbCrFilterPolicy,
+    DevicePolicy, FloatMathsPolicy, HalfRoundingPolicy, NanMinMaxPolicy, RoundingOrderPolicy,
+    SamplingPolicy, TexelConversionPolicy, YCbCrFilterPolicy,
 };
 use crate::device::{mechanism, Device, DeviceProfile};
 use crate::error::Error;
@@ -303,7 +303,6 @@ impl ReducedForms {
                 half_rounding: HalfRoundingPolicy::Native,
                 nan_and_min_max: NanMinMaxPolicy::Native,
                 rounding_order: RoundingOrderPolicy::Native,
-                half_blend: HalfBlendPolicy::Device,
                 ..sampled
             },
         }
@@ -325,7 +324,6 @@ fn dropped_forms(
         half_rounding: base.half_rounding != policy.half_rounding,
         nan_and_min_max: base.nan_and_min_max != policy.nan_and_min_max,
         rounding_order: base.rounding_order != policy.rounding_order,
-        half_blend: base.half_blend != policy.half_blend,
     };
     RuntimeDependency {
         fact,

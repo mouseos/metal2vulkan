@@ -505,9 +505,6 @@ pub struct ProfileFields {
     /// Whether a normalized vertex attribute is converted by fixed-function vertex input or
     /// pulled and divided exactly in the shader (the policy's).
     pub vertex_normalized: crate::device::policy::VertexNormalizedPolicy,
-    /// Whether a `half4` output of a module without fast math blends into a 16-bit float
-    /// attachment in the device's blend or in Metal's, computed by the function (the policy's).
-    pub half_blend: crate::device::policy::HalfBlendPolicy,
     /// Whose `half` rounding a module takes: Metal's (a measured form, or the integer rounding
     /// the policy's `HalfRoundingPolicy::Exact` asks for) or the device's own conversion or
     /// quantize (`lower::arith::narrow::quantize_form`). Derived, so a device measured to round

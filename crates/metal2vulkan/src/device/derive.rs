@@ -341,7 +341,6 @@ fn derive_fields(
         isolation: policy.isolation,
         texel_conversion: policy.texel_conversion,
         vertex_normalized: policy.vertex_normalized,
-        half_blend: policy.half_blend,
         // Metal's where a form is measured to be Metal's or the policy asks for Metal's rounding;
         // elsewhere the device's own.
         half_rounding: if policy.half_rounding == HalfRoundingPolicy::Exact

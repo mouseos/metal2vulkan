@@ -799,7 +799,6 @@ pub enum RuntimeFact {
         half_rounding: bool,
         nan_and_min_max: bool,
         rounding_order: bool,
-        half_blend: bool,
     },
     /// The render pipeline was compiled under `VariantKey::quad_primitive_ids`, and its fragment
     /// function reads `[[primitive_id]]` from Vulkan's `PrimitiveId` shifted right by one

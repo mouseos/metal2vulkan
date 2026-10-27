@@ -8,10 +8,10 @@
 
 use crate::device::{
     BatchOrderPolicy, CompletionPolicy, DecodedTexelsPolicy, DevicePolicy, FloatMathsPolicy,
-    HalfBlendPolicy, HalfRoundingPolicy, HeapCompressionPolicy, HostPageTexturePolicy,
-    MultisampleDepthTwinPolicy, NanMinMaxPolicy, RenderLoweringPolicy, ResolvePolicy,
-    RoundingOrderPolicy, SamplingPolicy, TexelConversionPolicy, TileStorePolicy,
-    Unorm8LinearFilterPolicy, VertexNormalizedPolicy, YCbCrFilterPolicy,
+    HalfRoundingPolicy, HeapCompressionPolicy, HostPageTexturePolicy, MultisampleDepthTwinPolicy,
+    NanMinMaxPolicy, RenderLoweringPolicy, ResolvePolicy, RoundingOrderPolicy, SamplingPolicy,
+    TexelConversionPolicy, TileStorePolicy, Unorm8LinearFilterPolicy, VertexNormalizedPolicy,
+    YCbCrFilterPolicy,
 };
 use crate::pipeline::PrecisionNote;
 use std::collections::BTreeSet;
@@ -70,7 +70,6 @@ fn choices() -> Vec<Choice> {
         half_rounding: _,
         nan_and_min_max: _,
         rounding_order: _,
-        half_blend: _,
         // The runtime's: where a multisampled `Depth32Float` texture's texels are held, the
         // texels of a carried texture's decoded twin, a heap's compressed
         // texture's image, when the host sees a command buffer complete, a loaded attachment's
@@ -97,7 +96,6 @@ fn choices() -> Vec<Choice> {
         choice!(p.half_rounding: HalfRoundingPolicy { Native, Exact }),
         choice!(p.nan_and_min_max: NanMinMaxPolicy { Native, Exact }),
         choice!(p.rounding_order: RoundingOrderPolicy { Native, Exact }),
-        choice!(p.half_blend: HalfBlendPolicy { Device, Exact }),
         choice!(p.multisample_depth_twin: MultisampleDepthTwinPolicy { Device, Exact }),
         choice!(p.decoded_texels: DecodedTexelsPolicy { Compact, Exact }),
         choice!(p.heap_compression: HeapCompressionPolicy { Compressed, Uncompressed }),
@@ -153,7 +151,6 @@ fn notes() -> Vec<(&'static str, Ledger)> {
             NativeMix,
             NativeHalfConversion,
             NativeHalfQuantize,
-            HalfOutputPrecision,
         ],
         NotBuilt: [
             ExtendedRangeBlendSource,
@@ -174,6 +171,7 @@ fn notes() -> Vec<(&'static str, Ledger)> {
             ColorAttachmentGroups,
         ],
         Elsewhere: [
+            HalfOutputPrecision,
             F16FmaDoubleRounding,
             F16IntConvDoubleRounding,
             GradFromBias,

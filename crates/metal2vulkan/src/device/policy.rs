@@ -60,10 +60,6 @@ pub struct DevicePolicy {
     /// the products, its two fused multiply-adds, its `x · rsqrt(x)`) or are the device's single
     /// instructions (the default).
     pub rounding_order: RoundingOrderPolicy,
-    /// Whether a `half4` color output of a module that states its math mode blends into a 16-bit
-    /// float attachment in the device's blend (the default) or in Metal's own arithmetic, which
-    /// the function computes in the shader.
-    pub half_blend: HalfBlendPolicy,
 
     /// Whether a multisampled `Depth32Float` texture the program only reads is held in a depth
     /// image (the default) or, where the device's depth images may not keep its texels, in a
@@ -117,7 +113,7 @@ impl DevicePolicy {
     /// filter emulated exactly where the emulation runs, native device sampling (a two-plane YCbCr texture's samples among them),
     /// native device maths, the device's own texel
     /// conversions, native half rounding, the device's NaN and minimum and maximum, the device's
-    /// rounding order, the device's blend of a `half` output into a 16-bit float attachment, a
+    /// rounding order, a
     /// multisampled `Depth32Float` texture's texels in a
     /// depth image, compact codes in a carried texture's decoded twin, the driver's compressed image of a
     /// heap's texture Metal keeps compressed, command buffers ready together in one kernel
@@ -139,7 +135,6 @@ impl DevicePolicy {
         half_rounding: HalfRoundingPolicy::Native,
         nan_and_min_max: NanMinMaxPolicy::Native,
         rounding_order: RoundingOrderPolicy::Native,
-        half_blend: HalfBlendPolicy::Device,
         multisample_depth_twin: MultisampleDepthTwinPolicy::Device,
         decoded_texels: DecodedTexelsPolicy::Compact,
         heap_compression: HeapCompressionPolicy::Compressed,
@@ -156,8 +151,7 @@ impl DevicePolicy {
     /// ([`TexelConversionPolicy::Exact`]), its normalized vertex attributes
     /// ([`VertexNormalizedPolicy::Exact`]), its `half` rounding ([`HalfRoundingPolicy::Exact`]), its
     /// NaN and minimum and maximum ([`NanMinMaxPolicy::Exact`]), its rounding order
-    /// ([`RoundingOrderPolicy::Exact`]), its 16-bit float blend of a `half` output
-    /// ([`HalfBlendPolicy::Exact`]), its filter of a
+    /// ([`RoundingOrderPolicy::Exact`]), its filter of a
     /// two-plane YCbCr texture
     /// ([`YCbCrFilterPolicy::Exact`]), its decode of a carried texture's texels
     /// ([`DecodedTexelsPolicy::Exact`]), a heap's texture whose bytes alias the heap's
@@ -179,7 +173,6 @@ impl DevicePolicy {
             half_rounding: HalfRoundingPolicy::Exact,
             nan_and_min_max: NanMinMaxPolicy::Exact,
             rounding_order: RoundingOrderPolicy::Exact,
-            half_blend: HalfBlendPolicy::Exact,
             multisample_depth_twin: MultisampleDepthTwinPolicy::Exact,
             decoded_texels: DecodedTexelsPolicy::Exact,
             heap_compression: HeapCompressionPolicy::Uncompressed,
@@ -465,46 +458,6 @@ pub enum RoundingOrderPolicy {
     Native,
     /// Metal's order: `dot` the fused chain of its products, `mix` `fma(t, y, fma(-t, x, x))`, and
     /// `fast::sqrt` `x · rsqrt(x)` with Metal's answers at a zero, a denormal and `+inf`.
-    Exact,
-}
-
-/// How a `half4` color output of a module that states its math mode blends into an `R16Float`,
-/// `RG16Float` or `RGBA16Float` attachment.
-///
-/// Without fast math (`air.compile.fast_math_disable`, safe or relaxed math) Metal blends it in
-/// `half` arithmetic: the `half` the function returns, each factor (`1 - x` and the blend color's
-/// `half` included), each product and the sum rounded to `half`, nearest even. With fast math
-/// (`air.compile.fast_math_enable`) Metal's compiler folds the blend into the function before its
-/// fast-math passes, which fuse and regroup it: the blend is a form the blend state decides only
-/// where that form is measured (`extended_range::blend::Blend::fitted`) and no lane of the output
-/// folds into it (`lower::fragment::fetch`), and Metal rounds the source's product to the
-/// attachment and carries the destination's into the sum unrounded where a pair is contracted,
-/// where a device's own blend is the mirror image. A module naming no math mode is not governed
-/// here: what Metal's compiler does to its blend was not measured.
-///
-/// A device's own blend adds in its arithmetic and rounds once. This governs an attachment the
-/// function does not read: one the function fetches in the interlocked storage form takes Metal's
-/// blend there whatever this says, no Vulkan blend applying to a storage write.
-#[non_exhaustive]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum HalfBlendPolicy {
-    /// The device's blend (the default): a blended channel may store a value apart from Metal's
-    /// within the bound
-    /// [`PrecisionNote::HalfOutputPrecision`](crate::pipeline::PrecisionNote::HalfOutputPrecision)
-    /// records, which the pipeline then records.
-    #[default]
-    Device,
-    /// Metal's blend, computed by the function in the interlocked storage form of the attachment
-    /// (`lower::fragment::fetch`) on a device that orders framebuffer fetch through the pixel
-    /// interlock: the attachment becomes a storage image the function reads and writes, so its
-    /// image needs `STORAGE` usage (a pass renders a texture without it into a stand-in) and a
-    /// pass splits where its draws change the attachment's role. Where that form is not exact
-    /// for the pipeline (a device without the interlock, a depth or stencil test the write would
-    /// precede, alpha to coverage, multiview, a format the device does not store, a blend of the
-    /// second source, and under fast math a blend state whose form is not measured or an output
-    /// a lane of which folds into the blend), the device blends and the pipeline records the note
-    /// as under [`HalfBlendPolicy::Device`].
     Exact,
 }
 

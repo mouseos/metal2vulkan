@@ -65,7 +65,7 @@ fn device(stem: &str, policy: DevicePolicy) -> Device {
 
 /// The forms a fitted pipeline's `dependencies` record it dropped, in the fact's field order;
 /// `None` where it records none.
-fn dropped(dependencies: &[RuntimeDependency]) -> Option<[bool; 7]> {
+fn dropped(dependencies: &[RuntimeDependency]) -> Option<[bool; 6]> {
     dependencies.iter().find_map(|d| match d.fact {
         RuntimeFact::ExactFormsOverCompilerLimit {
             sampling,
@@ -74,7 +74,6 @@ fn dropped(dependencies: &[RuntimeDependency]) -> Option<[bool; 7]> {
             half_rounding,
             nan_and_min_max,
             rounding_order,
-            half_blend,
         } => Some([
             sampling,
             float_maths,
@@ -82,7 +81,6 @@ fn dropped(dependencies: &[RuntimeDependency]) -> Option<[bool; 7]> {
             half_rounding,
             nan_and_min_max,
             rounding_order,
-            half_blend,
         ]),
         _ => None,
     })
@@ -99,7 +97,6 @@ fn fitted_as<P: Fitted>(reduced: P, compiled: &P) -> P {
         half_rounding: true,
         nan_and_min_max: true,
         rounding_order: true,
-        half_blend: true,
     };
     let mut reduced = reduced;
     reduced
@@ -179,7 +176,7 @@ fn a_module_over_the_compiler_bound_drops_its_exact_forms_to_fit() {
     assert_eq!(largest(&pipe), w_fast, "reduced to the fast default");
     assert_eq!(
         dropped(&pipe.dependencies),
-        Some([true; 7]),
+        Some([true; 6]),
         "every exact form dropped"
     );
 
@@ -190,7 +187,7 @@ fn a_module_over_the_compiler_bound_drops_its_exact_forms_to_fit() {
         assert_eq!(largest(&pipe), w_sampling_native);
         assert_eq!(
             dropped(&pipe.dependencies),
-            Some([true, false, false, false, false, false, false]),
+            Some([true, false, false, false, false, false]),
             "only sampling dropped"
         );
     }
@@ -242,7 +239,7 @@ fn a_module_over_the_compiler_bound_drops_its_exact_forms_to_fit() {
         .expect("fitted from the functions");
     assert_eq!(fitted.key, keys.pipeline);
     assert_eq!(largest(&fitted), w_fast);
-    assert_eq!(dropped(&fitted.dependencies), Some([true; 7]));
+    assert_eq!(dropped(&fitted.dependencies), Some([true; 6]));
 }
 
 /// A mesh render pipeline is fitted as a vertex and fragment pipeline is: past the bound, its
@@ -518,7 +515,7 @@ fn a_compute_pipeline_over_the_compiler_bound_drops_its_exact_forms_to_fit() {
         assert_eq!(pipe.stage, sampled.stage, "{stem}: native sampling");
         assert_eq!(
             dropped(&pipe.dependencies),
-            Some([true, false, false, false, false, false, false]),
+            Some([true, false, false, false, false, false]),
             "{stem}: only sampling dropped"
         );
         assert_eq!(

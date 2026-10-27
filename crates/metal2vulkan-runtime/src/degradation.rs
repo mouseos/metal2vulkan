@@ -2695,7 +2695,6 @@ pub(crate) fn dropped_exact_forms(
             half_rounding,
             nan_and_min_max,
             rounding_order,
-            half_blend,
         } => Some(
             [
                 (sampling, "exact sampling"),
@@ -2704,7 +2703,6 @@ pub(crate) fn dropped_exact_forms(
                 (half_rounding, "exact half rounding"),
                 (nan_and_min_max, "exact NaN and minimum and maximum"),
                 (rounding_order, "exact rounding order"),
-                (half_blend, "exact half blend"),
             ]
             .into_iter()
             .filter_map(|(dropped, name)| dropped.then_some(name))

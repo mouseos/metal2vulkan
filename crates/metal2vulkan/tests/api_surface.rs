@@ -233,7 +233,6 @@ surface! {
         enum HalfRoundingPolicy N;
         enum NanMinMaxPolicy N;
         enum RoundingOrderPolicy N;
-        enum HalfBlendPolicy N;
         enum MultisampleDepthTwinPolicy N;
         enum DecodedTexelsPolicy N;
         enum HeapCompressionPolicy N;
