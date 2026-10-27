@@ -713,7 +713,7 @@ fn unmeasured_moltenvk() -> DeviceProfile {
 /// each, `AnisotropicFilter` recorded and `CubeGradientFootprint` not). Through an isotropic
 /// sampler the unmeasured route alone takes Metal's level and its one tap (two explicit levels, no
 /// loop, neither note), where the refusal was; a device without the feature keeps its own gradient
-/// sample there. On a measured route (`moltenvk-m3`, whose kernels hand Metal's own gradients) the
+/// sample there, at the footprint the cube's form hands it. On a measured route (`moltenvk-m3`, whose kernels hand Metal's own gradients) the
 /// device's gradient sample stays, unrecorded.
 #[test]
 fn a_cubes_explicit_gradients_take_metals_level_and_taps() {
@@ -760,11 +760,18 @@ fn a_cubes_explicit_gradients_take_metals_level_and_taps() {
             assert_eq!(count(&a, OP_IMAGE_SAMPLE_EXPLICIT_LOD), 1, "{what}");
             assert_eq!(count(&a, OP_IMAGE_QUERY_LEVELS), 0, "{what}");
             assert_eq!(gradient_masks(&a), vec![GRAD], "{what}");
-            for note in [
-                PrecisionNote::AnisotropicFilter,
-                PrecisionNote::CubeGradientFootprint,
-            ] {
-                assert!(!a.precision.contains(&note), "{what}: {:?}", a.precision);
+            assert!(
+                !a.precision.contains(&PrecisionNote::AnisotropicFilter),
+                "{what}: {:?}",
+                a.precision
+            );
+            // Metal's own sampler on a measured route takes Metal's own gradients.
+            if stem == "moltenvk-m3" {
+                assert!(
+                    !a.precision.contains(&PrecisionNote::CubeGradientFootprint),
+                    "{what}: {:?}",
+                    a.precision
+                );
             }
         }
     }

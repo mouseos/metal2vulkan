@@ -113,8 +113,7 @@
 //! UNORM view of the same image ([`srgb_raw_view`]): the `RuntimeFact::SrgbTexture` variant of a
 //! function. Its [`texel_format`] is [`UNORM`](BicubicTexels::UNORM) and
 //! [`SRGB`](BicubicTexels::SRGB) with its channels, never [`EXACT`](BicubicTexels::EXACT): a
-//! conversion of the device's value keeps its rounding, and the emulated linear filter reads the
-//! raw codes under the variant alone, adding `EXACT` there. A gather's `float` value is not
+//! conversion of the device's value keeps its rounding. A gather's `float` value is not
 //! measured, so it keeps the device's decode (`PrecisionNote::SrgbTexelDecode`). `RGBA8Unorm_sRGB`
 //! was read, and so were `BGRA8Unorm_sRGB`, `R8Unorm_sRGB`, and `RG8Unorm_sRGB` (the probe): they
 //! take its rule ([`srgb_raw`]). So do the sRGB forms of BC1 to BC3 and BC7 (an Apple M4: every

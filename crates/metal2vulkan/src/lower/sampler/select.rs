@@ -2142,7 +2142,8 @@ fn select_one(
     if let Some((note, when)) = super::linear::filter_note(cx, &op, form, (by, image))? {
         cx.note_when(note, when, m)?;
     }
-    // A gather's or a repeating nearest sample's coordinate snapped onto Metal's texels.
+    // A pixel sampler's gather (or a runtime sampler's, behind its word) and a linear pixel
+    // sample's footprint cell, snapped onto Metal's texels.
     let snap = super::position::plan(cx, &op, stat, (shape, integer))?;
     // Metal's texture unit reads a subnormal normalized coordinate as the zero of its sign before
     // the address mode decides: the border axes of a constexpr sampler flush it, so the sample
@@ -2351,9 +2352,8 @@ fn select_one(
             return Err(Unsupported::not_implemented(Feature::ArgumentBufferTextures).into())
         }
     };
-    // A depth comparison the device makes reads a depth image (the texture's own, or its twin),
-    // which a device without `VK_EXT_depth_range_unrestricted` may hold clamped; the shader's own
-    // comparisons read the texels without comparison, which a twinned texture holds in colour.
+    // A depth comparison, the device's, reads a depth image (the texture's own, or its twin),
+    // which a device without `VK_EXT_depth_range_unrestricted` may hold clamped.
     if shape.depth && compare {
         crate::lower::texture::depth_comparison(cx);
     }

@@ -2962,10 +2962,12 @@ fn heap_plain_half_kernel(through: CompareThrough, gather: bool) -> String {
 }
 
 /// A heap color texture's sample or gather with a `half` result converts the device's texel (or the
-/// fetched one) by the class its handle carries, as a slot's converts by its bound format's: the
-/// module calls the `half` routine once, with the class read from the handle's table, on every
-/// profile, where the same access with a `float` result calls no routine. The note stays: the
-/// class may be one whose conversion is not measured.
+/// fetched one) by the class its handle carries, as a slot's converts by its bound format's, on a
+/// profile that samples through Metal's own sampler (`VkProperty::MetalSampler`, whose `float`
+/// result the class's rule rounds as Metal does): the module calls the `half` routine once, with
+/// the class read from the handle's table, where the same access with a `float` result calls no
+/// routine. On any other profile the `half` texel is the device's conversion: no routine. The note
+/// stays: the class may be one whose conversion is not measured.
 #[test]
 fn heap_half_texels_convert_by_the_handle_s_class() {
     let cases = [
@@ -2996,9 +2998,10 @@ fn heap_half_texels_convert_by_the_handle_s_class() {
             // nearest tap both ways for a `half` result (a bfloat form's toward zero, another's
             // rounded): one call more than the `float` result's.
             let twin = usize::from(!gather && !matches!(through, CompareThrough::Argument));
+            let routine = usize::from(metal_sampler(&p));
             assert_eq!(
                 count(&a, OP_FUNCTION_CALL),
-                count(&f, OP_FUNCTION_CALL) + 1 + twin,
+                count(&f, OP_FUNCTION_CALL) + routine + twin,
                 "{what}: the half routine is called once, the float one where it converts"
             );
             let notes = &a.precision;

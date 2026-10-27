@@ -392,7 +392,8 @@ pub const FLAG_OUT_OF_BOUNDS_ALPHA_ONE: u32 = 1 << 1;
 /// The field of a texture entry's flags holding the index of its texel class in
 /// `metal::texel_format::heap_classes`: the class a slot bound to the texture would state in its
 /// `TexelFormat` specialization, `OTHER` (index 0) for a swizzled texture, by which a function
-/// emulates Metal's linear filter of the texture's texels where the module reads it. A heap handle
+/// converts or reads the texture's texels where the module reads it (a `half` conversion on Metal's
+/// own sampler, a fetched gather, a NaN texel's rule, a raw-held form's emulation). A heap handle
 /// carries it in place, in a module whose search carries it ([`Lookup::Flagged`]'s `class`), so
 /// [`HANDLE_TEXEL_CLASS`] is this field.
 pub const FLAG_TEXEL_CLASS: u32 = 0x1fff << 16;

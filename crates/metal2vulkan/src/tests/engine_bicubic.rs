@@ -26,7 +26,6 @@ use crate::device::DevicePolicy;
 use crate::error::{Error, Feature, Needs, Unsupported};
 use crate::lower::select::Plan;
 use crate::metal::bicubic::{texels, weights, BicubicTexels};
-use crate::metal::texel_format::texel_format;
 use crate::metal::PixelFormat;
 use crate::pipeline::interface::PushLoc;
 use crate::pipeline::sym::{
@@ -74,11 +73,6 @@ fn m3() -> DeviceProfile {
     profile("moltenvk-m3", DevicePolicy::default()).expect("profile")
 }
 
-/// A profile without Metal's own sampler, where a linear sample is the emulation.
-fn lavapipe() -> DeviceProfile {
-    profile("lavapipe", DevicePolicy::default()).expect("profile")
-}
-
 /// The words of `constexpr sampler(filter::bicubic, ...)` with every axis addressed by `address`
 /// (AIR code: 0 zero or border, 1 edge, 2 repeat, 3 mirrored repeat), `pixel` coordinates, and
 /// border color code `border` (0 transparent black, 2 opaque white), as Apple's compiler
@@ -86,12 +80,6 @@ fn lavapipe() -> DeviceProfile {
 fn bicubic_words(address: u64, pixel: bool, border: u64) -> u64 {
     const BASE: u64 = 0x007b_ff00_0008_1400;
     BASE | address | address << 3 | address << 6 | u64::from(pixel) << 15 | border << 56
-}
-
-/// The words of `constexpr sampler(filter::linear, ...)` with the fields of
-/// `bicubic_words(address, false, 0)` but the filters: Metal's linear filter beside it.
-fn linear_words(address: u64) -> u64 {
-    bicubic_words(address, false, 0) & !(0xf << 9) | 1 << 9 | 1 << 11
 }
 
 /// `words` with its `s` axis (`axis` 0) or its `t` axis (1) addressed by AIR code `address`.
@@ -1001,17 +989,14 @@ fn an_offset_on_a_repeating_axis_takes_metals_placement() {
     }
 }
 
-/// Metal's bicubic filter on small levels and mirrored axes (`lower::sampler::bicubic`'s module
-/// docs; the probes probes on the M3 Max, the primary):
+/// Metal's bicubic filter on mirrored axes (`lower::sampler::bicubic`'s module docs; the probes on
+/// the M3 Max, the primary):
 /// - On a 12x10 level, a mirrored axis of a format Metal filters bicubically reads texel 1 at
 ///   fraction 0 whatever the coordinate (with both axes mirrored, texel `(1, 1)`), while the other
 ///   axis filters as it is addressed; a 32-bit float format's mirrored sample is the linear
 ///   filter's, its taps reflected about the mirrored position.
-/// - On a level below four texels on either axis (3x13, 13x3, and 2x2, beside the 4x4 that is
-///   not small), the sample is the linear sampler's with the same address modes, bit for bit
-///   (the emulation, on a profile without Metal's own sampler), under every mode.
 #[test]
-fn mirrored_axes_and_small_levels() {
+fn mirrored_axes() {
     let (w, h) = (12i64, 10i64);
     let points = coordinates(w, h);
     let scale = (w as f64, h as f64);
@@ -1089,80 +1074,6 @@ fn mirrored_axes_and_small_levels() {
             }
         }
     }
-    // Small levels: the bicubic sample is the linear sample with the same address modes.
-    let p = lavapipe();
-    let modes = [("zero", 0), ("edge", 1), ("repeat", 2), ("mirror", 3)];
-    let sizes = [(3i64, 13i64), (13, 3), (2, 2), (4, 4)];
-    let formats = [
-        PixelFormat::RGBA8Unorm,
-        PixelFormat::RGBA16Float,
-        PixelFormat::RGBA32Float,
-    ];
-    for (name, address) in modes {
-        let (Some(cubic), Some(lin)) = (
-            assemble(
-                &format!("small {name}"),
-                &kernel(
-                    bicubic_words(address, false, 0),
-                    Form::Plain { offset: (0, 0) },
-                ),
-            ),
-            assemble(
-                &format!("small {name} linear"),
-                &kernel(linear_words(address), Form::Plain { offset: (0, 0) }),
-            ),
-        ) else {
-            return;
-        };
-        let a = compile(&lin, "k", &p).expect("compile linear");
-        assert_eq!(
-            a.strategies.entries.get("sampler.linear").map(|u| u.uses),
-            Some(1),
-            "{name}: the linear sample is not the emulation"
-        );
-        let (cubic_plan, cubic_m) = typed_module(&cubic, "k", &p).expect("typed module");
-        let (lin_plan, lin_m) = typed_module(&lin, "k", &p).expect("typed module");
-        for (w, h) in sizes {
-            let points = coordinates(w, h);
-            let scale = (w as f64, h as f64);
-            let mut differ = 0;
-            for (seed, pf) in formats.iter().enumerate() {
-                let class = texels(*pf).expect("measured");
-                let tex = Texels::random(class, w, h, seed as u64 + 21);
-                let init = [coord_bytes(&points, scale), vec![0xab; 16 * points.len()]];
-                let sample = |plan: &Plan, m: &TypedModule| {
-                    let mut res = resources(plan, &init, class);
-                    res.spec.insert(
-                        SpecKey::TexelFormat(TEXTURE),
-                        u64::from(texel_format(*pf).0),
-                    );
-                    res.spec.insert(
-                        SpecKey::PlainHalfTexels(TEXTURE),
-                        u64::from(texel_format(*pf).plain_on_metal_sampler()),
-                    );
-                    let image = tex.image(combined_slot(m), 2, 1);
-                    run(m, &res, &image, points.len() as u32)
-                };
-                let (got, want) = (sample(&cubic_plan, &cubic_m), sample(&lin_plan, &lin_m));
-                for (lane, (g, l)) in got.iter().zip(&want).enumerate() {
-                    let same = g.iter().zip(l).all(|(a, b)| a.to_bits() == b.to_bits());
-                    if w.min(h) < 4 {
-                        assert!(
-                            same,
-                            "{name} {w}x{h} {pf:?} lane {lane} {:?}: {g:?} vs linear {l:?}",
-                            points[lane]
-                        );
-                    }
-                    differ += usize::from(!same);
-                }
-            }
-            // A 4x4 level is filtered bicubically: some lane tells it from the linear filter.
-            assert!(
-                w.min(h) < 4 || differ > 0,
-                "{name} {w}x{h}: every lane is the linear filter's"
-            );
-        }
-    }
 }
 
 fn refused(e: &Error) -> bool {
@@ -1180,7 +1091,7 @@ fn refused(e: &Error) -> bool {
 /// lowered through the binding's nearest-filtered immutable sampler:
 /// - `min_lod_clamp` (Apple's device compiler fails to build the pipeline) and a dynamic offset;
 /// - `mirrored_repeat` on a 1D texture, with pixel coordinates, or beside a constant offset on
-///   the mirrored axis (a 2D sample's mirrored axis is in `mirrored_axes_and_small_levels`);
+///   the mirrored axis (a 2D sample's mirrored axis is in `mirrored_axes`);
 /// - a depth comparison (refused by `check`'s depth term: AIR compares only depth textures) and
 ///   an LOD query;
 /// - a 3D, cube, depth, or integer texture;

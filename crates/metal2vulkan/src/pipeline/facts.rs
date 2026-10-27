@@ -284,13 +284,14 @@ pub enum RuntimeFact {
     /// kernel in the emulated tier votes in its scratch instead
     /// (`RuntimeFact::SimdgroupEmulation`).
     PredicationVote,
-    /// The function reads or samples the texture (or texture buffer) bound to the slot with a
-    /// `half` result, or samples it through an emulated linear filter, and Metal's conversion of
-    /// a texel to `half`, or its linear filter's sum, depends on the bound pixel format (a read
-    /// of a 32-bit float texel rounds to nearest even, a sample of one toward zero; a normalized
-    /// texel's value is rounded onto its format's grid first): the slot's `SpecKey::TexelFormat`
-    /// specialization (`metal::texel_format::texel_format`), which the binder sets from the
-    /// bound format.
+    /// The function reads the class of the texture (or texture buffer) bound to the slot, which
+    /// the binder sets from the bound format: the slot's `SpecKey::TexelFormat` specialization
+    /// (`metal::texel_format::texel_format`). A read, gather or sample with a `half` result on a
+    /// device that samples through Metal's own sampler converts its texel by it, Metal's conversion
+    /// depending on the format (a read of a 32-bit float texel rounds to nearest even, a sample of
+    /// one toward zero; a normalized texel's value is rounded onto its format's grid first); an
+    /// 8-bit sRGB slot's raw read, a fetched gather and a NaN texel's rule (the NaN switch) read
+    /// it too.
     TexelFormat { slot: SlotRef },
     /// The function reads, samples, or gathers the texture bound to the slot in a form whose
     /// result Metal takes from the raw code of an 8-bit sRGB texel, decoded through its

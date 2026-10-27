@@ -1057,11 +1057,9 @@ const OP_SWITCH: u16 = 251;
 /// the sample needs `maintenance8`. Without `shaderImageGatherExtended` (the floor) a dynamic gather
 /// offset is taken as `ConstOffset` arms: one switch on its dynamic lane's low four bits, 16 gathers
 /// each with a `ConstOffset` and none with `Offset`, and the module needs neither feature. A
-/// runtime sampler's gather reads the offset a second time for its snap behind
-/// the word, which moves the centre back where Metal drops it, on a device without Metal's own
-/// sampler (lavapipe). On one with it (MoltenVK) only a pixel word's gather snaps, and Metal's own
-/// sampler drops the offset of the normalized centre it is handed where Metal drops the pixel
-/// coordinate's, so the snap moves nothing by the offset and reads it once.
+/// runtime sampler's gather snaps a pixel word's coordinate behind the word and moves nothing by
+/// the offset, which the device's sampler places, so it reads the offset once on every device
+/// (lavapipe, MoltenVK).
 #[test]
 fn dynamic_offsets_are_offset_operands_of_their_low_four_bits() {
     let Some(bc) = assemble("gather_dynamic_offset", &dynamic_offset_kernel(true)) else {
@@ -1070,7 +1068,7 @@ fn dynamic_offsets_are_offset_operands_of_their_low_four_bits() {
     let lavapipe = profile("lavapipe", DevicePolicy::default()).expect("profile");
     let a = ok(&bc, "k", &lavapipe);
     assert_eq!(operand_masks(&a, OP_IMAGE_GATHER, 6), [MASK_OFFSET]);
-    assert_eq!(sign_extracts(&a), 2);
+    assert_eq!(sign_extracts(&a), 1);
     let p = m3();
     let a = ok(&bc, "k", &p);
     assert_eq!(uses(&a, "sampler.gather"), 1);

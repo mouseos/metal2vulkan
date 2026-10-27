@@ -450,8 +450,7 @@ degradations! {
         /// ([`metal2vulkan::pipeline::RuntimeFact::ExactFormsOverCompilerLimit`];
         /// [`metal2vulkan::device::DriverWorkaround::RegisterAllocatorOverflowsLargeModules`],
         /// ANV's register allocator faults compiling a module past it), so the translation dropped
-        /// the consumer's exact forms until it fit: native sampling first, then every
-        /// module-growing exact answer native. Announced where the runtime makes a variant whose
+        /// the consumer's exact forms: every module-growing exact answer native. Announced where the runtime makes a variant whose
         /// pipeline the fit reduced, the base variant or another (`pipeline/render.rs` for a
         /// render or mesh render state, `pipeline/mod.rs` for a compute or tile render state, from
         /// the pipeline's dependencies), naming the state's kind and the forms dropped; the

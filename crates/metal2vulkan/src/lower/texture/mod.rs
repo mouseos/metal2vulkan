@@ -1751,15 +1751,14 @@ fn unconverted_class(cx: &mut SelectCx<'_>, index: u32) -> Result<NoteClause, Er
     .into())
 }
 
-/// An emulated linear sample of `image` that converts no texel to `half` by the class: a raw
-/// sample, whose emulation reads the `UNORM`, `SRGB`, and channel bits, or a sample with a `float`
-/// result, whose emulation reads the format's treatment; or an emulated cube gather, a depth cube's
-/// included, whose corner rule the class states. The slot's `TexelFormat` specialization
+/// An access of texture slot `image` that reads its class without converting a texel to `half` by
+/// it: a raw sRGB access, whose decode reads the `UNORM`, `SRGB`, and channel bits, a fetched
+/// gather and a NaN texel's rule. The slot's `TexelFormat` specialization
 /// (`RuntimeFact::TexelFormat`), without the conversion routine. Nothing is noted here: a raw
-/// sample's decode is exact, and the sample's selection records its filter's note.
+/// access's decode is exact, and the access's selection records its own notes.
 pub(crate) fn texel_format_spec(cx: &mut SelectCx<'_>, image: ImageRef) -> Result<(), Error> {
     let ImageRef::Slot(index) = image else {
-        return Err(cx.invariant("an emulated linear sample of a heap element"));
+        return Err(cx.invariant("a slot's class of a heap element"));
     };
     let slot = slot_of(cx, index)?.slot;
     if let Some(s) = cx.families.texture.slots.get_mut(&index) {
