@@ -8,16 +8,9 @@
 
 use crate::device::{
     BatchOrderPolicy, CompletionPolicy, DecodedTexelsPolicy, DevicePolicy, FloatMathsPolicy,
-    HeapCompressionPolicy,
-    HostPageTexturePolicy,
-    NanMinMaxPolicy,
-    RenderLoweringPolicy,
-    RoundingOrderPolicy,
-    SamplingPolicy,
-    TexelConversionPolicy,
-    Unorm8LinearFilterPolicy,
-    VertexNormalizedPolicy,
-    YCbCrFilterPolicy,
+    HeapCompressionPolicy, HostPageTexturePolicy, NanMinMaxPolicy, RenderLoweringPolicy,
+    RoundingOrderPolicy, SamplingPolicy, TexelConversionPolicy, Unorm8LinearFilterPolicy,
+    VertexNormalizedPolicy, YCbCrFilterPolicy,
 };
 use crate::pipeline::PrecisionNote;
 use std::collections::BTreeSet;
