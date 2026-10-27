@@ -910,11 +910,12 @@ pub struct TexturePlan {
     /// nil texture's arm), sorted (`absent_arm`), whose words the census counts under
     /// [`ABSENT_ARM`]: computed after the body's selection.
     pub absent_arm: Vec<ValueId>,
-    /// The measured driver deviations, as their properties, the function's `float` writes to a
-    /// half-float storage image rely on (`select_write`): a write left to the device's
-    /// conversion because it stores Metal's half (`MetalHalfStorageWrites`), or a NaN rounded to
-    /// `0x7fc00000` because the device stores that as Metal's (`MetalFloatStorageNans`). The
-    /// module requires them.
+    /// The measured driver deviations, as their properties, the function's storage writes rely
+    /// on (`select_write`): a `float` write to a half-float storage image, left to the device's
+    /// conversion because it stores Metal's half (`MetalHalfStorageWrites`) and its NaN
+    /// (`MetalHalfStorageNans`), a write that may reach a normalized format, because it stores
+    /// Metal's codes (`MetalNormStorageWrites`), and a `half` texel's NaN to a 16-bit float format
+    /// (`MetalHalfTexelWrites`). The module requires them.
     pub storage_properties: BTreeSet<crate::device::requirements::VkProperty>,
     /// The function's depth comparisons the device makes read depth images that keep values
     /// outside `[0, 1]` without `VK_EXT_depth_range_unrestricted` because the driver's do
