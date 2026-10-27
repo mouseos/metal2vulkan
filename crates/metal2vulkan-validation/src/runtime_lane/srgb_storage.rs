@@ -11,9 +11,10 @@
 //! 255 rounded to nearest even, the X field of `RGBX8Unorm_sRGB` green's byte: every texel equal
 //! to `pack_float_to_srgb_unorm4x8` of the same values. A read (`read_write`, `float4` and
 //! `half4`) of code `c` answers its twelve-bit step `k / 4095` correctly rounded (alpha `c / 255`,
-//! 1 for `RGBX8Unorm_sRGB`; a channel the format lacks 0, alpha 1). The tables are Metal's own: the first encode indices are the color
-//! table's (`bind::color_write_table`), the steps `round(decode(c / 255) * 4095)` of the sRGB
-//! transfer (every one at least `1.6e-4` of a step from a half step).
+//! 1 for `RGBX8Unorm_sRGB`; a channel the format lacks 0, alpha 1). The tables are Metal's own:
+//! the first encode indices are its encode thresholds (`bind::SRGB_RESOLVE_THRESHOLDS`), the
+//! steps `round(decode(c / 255) * 4095)` of the sRGB transfer (every one at least `1.6e-4` of a
+//! step from a half step).
 //!
 //! The values are the probe's, in its order: the `f32`s around each twelve-bit index's half step
 //! (three ulps either side), each step's value and its neighbours, each alpha code's half step
