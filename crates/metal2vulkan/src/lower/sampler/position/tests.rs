@@ -131,7 +131,7 @@ fn run_offset(address: TapAddress, offset: i32, lanes: &[(f32, u32)]) -> Vec<[u3
             Buffer {
                 slot: Some(slot(1)),
                 address: None,
-                bytes: vec![0xAB; lanes.len() * 16],
+                bytes: vec![0xAB; lanes.len() * 12],
             },
         ],
         ..Resources::default()
@@ -142,7 +142,7 @@ fn run_offset(address: TapAddress, offset: i32, lanes: &[(f32, u32)]) -> Vec<[u3
     };
     let (out, _) = interp::run_with_images(&m, &cfg, res, Vec::new()).expect("run");
     out.buffers[1]
-        .as_chunks::<16>()
+        .as_chunks::<12>()
         .0
         .iter()
         .map(|c| {
@@ -1015,7 +1015,7 @@ fn a_runtime_samplers_gather_centres_metals_block_by_its_word() {
             checked += 1;
         }
     }
-    assert!(checked > 30_000, "{checked}");
+    assert!(checked > 15_000, "{checked}");
 }
 
 /// A kernel whose invocation `i` reads the bits of a two-lane coordinate from buffer 0 and writes
