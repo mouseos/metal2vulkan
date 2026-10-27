@@ -124,7 +124,6 @@ fn every_fact() -> Vec<RuntimeFact> {
         RuntimeFact::PredicationVote,
         RuntimeFact::TexelFormat { slot },
         RuntimeFact::SrgbTexture { slot },
-        RuntimeFact::HalfBitsTexture { slot },
         RuntimeFact::UlongAtomicView { slot },
         RuntimeFact::ViewportCount,
         RuntimeFact::AliasedImageblock { data_size: 24 },
@@ -280,7 +279,6 @@ fn every_fact() -> Vec<RuntimeFact> {
             nan_and_min_max: true,
             rounding_order: false,
             half_blend: false,
-            half_texel_bits: true,
         },
     ]
 }
@@ -334,7 +332,6 @@ fn variant(f: &RuntimeFact) -> usize {
         RuntimeFact::PredicationVote => 42,
         RuntimeFact::TexelFormat { .. } => 43,
         RuntimeFact::SrgbTexture { .. } => 44,
-        RuntimeFact::HalfBitsTexture { .. } => 98,
         RuntimeFact::UlongAtomicView { .. } => 45,
         RuntimeFact::ViewportCount => 46,
         RuntimeFact::AliasedImageblock { .. } => 47,
@@ -388,7 +385,7 @@ fn variant(f: &RuntimeFact) -> usize {
         RuntimeFact::RotatedWeights => 95,
         RuntimeFact::PrivateList => 96,
         RuntimeFact::MeshLastFirst => 97,
-        RuntimeFact::YCbCrInPlace { .. } => 99,
+        RuntimeFact::YCbCrInPlace { .. } => 98,
     }
 }
 
@@ -396,7 +393,7 @@ fn variant(f: &RuntimeFact) -> usize {
 fn mechanism_is_total_over_every_fact_and_profile() {
     let facts = every_fact();
     let covered: std::collections::BTreeSet<usize> = facts.iter().map(variant).collect();
-    assert_eq!(covered, (0..100).collect(), "every_fact misses a variant");
+    assert_eq!(covered, (0..99).collect(), "every_fact misses a variant");
     for (stem, _) in super::committed_profiles() {
         let dev = device(&stem);
         let p = dev.profile();
@@ -488,7 +485,6 @@ fn mechanism_is_total_over_every_fact_and_profile() {
                 | RuntimeFact::CapturedPositions { .. } => Mechanism::Variant,
                 RuntimeFact::ImageViewShape { .. }
                 | RuntimeFact::StorageTextureLevelViews { .. }
-                | RuntimeFact::HalfBitsTexture { .. }
                 | RuntimeFact::UlongAtomicView { .. } => Mechanism::BinderView,
                 RuntimeFact::VertexFetch { .. } | RuntimeFact::TileAttachmentFormat { .. } => {
                     Mechanism::KeyProjection
