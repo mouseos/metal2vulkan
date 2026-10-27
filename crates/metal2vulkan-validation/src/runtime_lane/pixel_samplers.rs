@@ -634,6 +634,20 @@ pub(super) fn metal_sampler(device: &Device) -> bool {
         .contains(&VkProperty::MetalSampler)
 }
 
+/// Whether `device` samples by its own sampler, not Metal's (`VkProperty::MetalSampler`), checking
+/// that the device announced `device-sampling` among `messages`' notices exactly then.
+pub(super) fn own_sampler(device: &Device, messages: &Messages) -> bool {
+    let own = !metal_sampler(device);
+    let announced = counts(&messages.take_notices());
+    assert_eq!(
+        announced.contains_key(&Degradation::DeviceSampling),
+        own,
+        "{}: device-sampling exactly where the device's sampler is not Metal's",
+        device.name()
+    );
+    own
+}
+
 /// `argument-pixel-sampler-scaling` fires at a dispatch, never at a state's making. An argument
 /// buffer's comparison through the sampler it holds beside a `Depth32Float` texture
 /// (`depth_compares::argument_kernel`), whose stage records the note on every device (a comparison

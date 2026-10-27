@@ -33,10 +33,9 @@
 //!   it reads at its position `X` (`nearest_positions`); a device that multiplies first reads the
 //!   next texel on some of these lanes (the deciding ones).
 
-use super::degrade_notices::counts;
 use super::mip_levels::{half, levels, texture, FILTERED, LEVELS};
 use super::nearest_positions::{metal_texel, multiplied_first};
-use super::pixel_samplers::metal_sampler;
+use super::pixel_samplers::own_sampler;
 use super::{
     buffer_with, layer_reported_nothing_at_all, read_buffer, validated_device, Messages,
     ScratchCache, WAIT,
@@ -51,8 +50,8 @@ use metal2vulkan::metal::{
 use metal2vulkan::pipeline::{ComputePipelineDescriptor, StageSource};
 use metal2vulkan_devtools::{engine_dir, llvm_assemble};
 use metal2vulkan_runtime::{
-    ComputePipelineState, Degradation, Device, PipelineOptions, Region, ResourceOptions,
-    SamplerState, SamplerStateOptions, Size, Texture, TextureDescriptor,
+    ComputePipelineState, Device, PipelineOptions, Region, ResourceOptions, SamplerState,
+    SamplerStateOptions, Size, Texture, TextureDescriptor,
 };
 
 /// The threads of a threadgroup; each grid is padded to whole threadgroups.
@@ -288,20 +287,6 @@ fn runtime_samplers_levels_read_metals_levels() {
         }
     }
     layer_reported_nothing_at_all(&messages);
-}
-
-/// Whether `device` samples by its own sampler, not Metal's (`VkProperty::MetalSampler`), checking
-/// that the device announced `device-sampling` among `messages`' notices exactly then.
-fn own_sampler(device: &Device, messages: &Messages) -> bool {
-    let own = !metal_sampler(device);
-    let announced = counts(&messages.take_notices());
-    assert_eq!(
-        announced.contains_key(&Degradation::DeviceSampling),
-        own,
-        "{}: device-sampling exactly where the device's sampler is not Metal's",
-        device.name()
-    );
-    own
 }
 
 /// The positions texture: level `L` of `max(13 >> L, 1)` by `max(11 >> L, 1)` texels, texel
