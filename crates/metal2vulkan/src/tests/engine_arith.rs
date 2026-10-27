@@ -3659,7 +3659,7 @@ fn decorates_fast_math(words: &[u32]) -> bool {
 }
 
 /// The kernels of the NaN-model tests: their declarations beside [`DECLS`].
-const NAN_DECLS: &str = "declare float @air.fast_round.f32(float)\ndeclare float @air.fast_asin.f32(float)\ndeclare float @air.fast_tan.f32(float)\ndeclare float @air.asin.f32(float)\n";
+const NAN_DECLS: &str = "declare float @air.fast_round.f32(float)\ndeclare float @air.fast_asin.f32(float)\ndeclare float @air.fast_tan.f32(float)\ndeclare float @air.asin.f32(float)\ndeclare float @air.sign.f32(float)\ndeclare float @air.fmedian3.f32(float, float, float)\n";
 
 /// A kernel storing `%s`'s bits, `float` `%s` defined by `body`.
 fn nan_kernel(name: &'static str, body: String, want: Option<u32>) -> Kernel {
@@ -3669,13 +3669,73 @@ fn nan_kernel(name: &'static str, body: String, want: Option<u32>) -> Kernel {
     }
 }
 
-/// The canonical NaN of `float` arithmetic is left to the device exactly where the profile takes
-/// its driver's deviation `MetalCanonicalNans`, that its arithmetic answers it, and selected
-/// everywhere else; flipping the fact on either device flips that emission and nothing else. The
-/// other classes are selected whatever the fact: `round` returns a NaN operand's own bits. The
-/// interpreter keeps a NaN operand's payload, as such a device would.
+/// Whether `bits` are a NaN of the stored format: a `half`'s, zero-extended, where `half`.
+fn stores_nan(bits: u32, half: bool) -> bool {
+    match half {
+        true => bits <= 0xFFFF && bits & 0x7C00 == 0x7C00 && bits & 0x3FF != 0,
+        false => f32::from_bits(bits).is_nan(),
+    }
+}
+
+/// Kernels `ks` of `bitcode` (each storing a NaN's bits, `half` ones zero-extended where `half`)
+/// on `lavapipe` and `moltenvk-m3`, each with its driver's deviation `MetalCanonicalNans` taken
+/// and not: the module selects no NaN, so it is the same word for word on both sides of the fact;
+/// it records `PrecisionNote::NativeNanEncoding` exactly where `noted(kernel, fact)` and never
+/// `DeviceNanEncoding`; and the interpreter's answer is the kernel's `want`, or a NaN, its bits the
+/// device's, where it has none, but for the kernels `unread` names, whose device instruction the
+/// interpreter does not evaluate.
+fn nans_are_the_device_s(
+    bitcode: &[u8],
+    ks: &[Kernel],
+    half: bool,
+    unread: &[&str],
+    noted: &dyn Fn(&str, bool) -> bool,
+) {
+    for stem in ["lavapipe", "moltenvk-m3"] {
+        for kk in ks {
+            let mut emitted = Vec::new();
+            for fact in [false, true] {
+                let p = profile_with_canonical_nans(stem, fact);
+                let what = format!("{} on {stem}, MetalCanonicalNans {fact}", kk.name);
+                let a = compile(bitcode, kk.name, &p).unwrap_or_else(|e| panic!("{what}: {e:?}"));
+                let (_, words) =
+                    link_and_validate(&a, &p).unwrap_or_else(|e| panic!("{what}: L3: {e}"));
+                assert_eq!(
+                    a.precision.contains(&PrecisionNote::NativeNanEncoding),
+                    noted(kk.name, fact),
+                    "{what}: {:?}",
+                    a.precision
+                );
+                assert!(
+                    !a.precision.contains(&PrecisionNote::DeviceNanEncoding),
+                    "{what}: {:?}",
+                    a.precision
+                );
+                if !unread.contains(&kk.name) {
+                    let got = interpret(bitcode, kk.name, &p);
+                    match kk.want {
+                        Some(want) => assert_eq!(got, want, "{what}: {got:#x}"),
+                        None => assert!(stores_nan(got, half), "{what}: {got:#x}"),
+                    }
+                }
+                emitted.push(words);
+            }
+            assert!(
+                emitted[0] == emitted[1],
+                "{} on {stem}: the module changes with the fact",
+                kk.name
+            );
+        }
+    }
+}
+
+/// A NaN of `float` arithmetic is the device's on every profile: the module selects none, whatever
+/// the profile's `MetalCanonicalNans` fact, and records `PrecisionNote::NativeNanEncoding` where
+/// the device is not measured to answer Metal's: for `+`, whose canonical NaN the fact covers,
+/// where the fact is absent, and for `round`, which returns a NaN operand's own bits on Metal,
+/// whatever the fact. The interpreter keeps a NaN operand's payload, as such a device would.
 #[test]
-fn the_canonical_nan_follows_the_device_fact() {
+fn a_float_nan_is_the_device_s_on_every_profile() {
     let ks = [
         nan_kernel(
             "nan_fadd",
@@ -3688,44 +3748,15 @@ fn the_canonical_nan_follows_the_device_fact() {
                 "{}  %s = call float @air.round.f32(float %x)\n",
                 ob("x", 0x7F80_0001)
             ),
-            Some(0x7F80_0001),
+            None,
         ),
     ];
-    let text = module(&ks);
-    let Some(bitcode) = assemble("nan-fact", &text) else {
+    let Some(bitcode) = assemble("nan-fact", &module(&ks)) else {
         return;
     };
-    for stem in ["moltenvk-m3", "lavapipe"] {
-        let mut emitted: Vec<Vec<Vec<u32>>> = Vec::new();
-        for fact in [true, false] {
-            let p = profile_with_canonical_nans(stem, fact);
-            let mut per = Vec::new();
-            for kk in &ks {
-                let what = format!("{} on {stem}, MetalCanonicalNans {fact}", kk.name);
-                let a = compile(&bitcode, kk.name, &p).unwrap_or_else(|e| panic!("{what}: {e:?}"));
-                let (_, words) =
-                    link_and_validate(&a, &p).unwrap_or_else(|e| panic!("{what}: L3: {e}"));
-                let got = interpret(&bitcode, kk.name, &p);
-                let (is_nan, bits) = nan_tests(&words);
-                if kk.name == "nan_fadd" {
-                    assert!(f32::from_bits(got).is_nan(), "{what}: {got:#x}");
-                    assert_eq!(got == 0x7FC0_0000, !fact, "{what}: {got:#x}");
-                    assert_eq!(is_nan + bits, usize::from(!fact), "{what}");
-                } else {
-                    assert_eq!(Some(got), kk.want, "{what}: {got:#x}");
-                }
-                assert!(
-                    !a.precision.contains(&PrecisionNote::DeviceNanEncoding),
-                    "{what}: {:?}",
-                    a.precision
-                );
-                per.push(words);
-            }
-            emitted.push(per);
-        }
-        assert_ne!(emitted[0][0], emitted[1][0], "nan_fadd on {stem}");
-        assert_eq!(emitted[0][1], emitted[1][1], "nan_round on {stem}");
-    }
+    nans_are_the_device_s(&bitcode, &ks, false, &[], &|name, fact| {
+        name == "nan_round" || !fact
+    });
     // The committed profiles state the fact for the measured device only.
     for (stem, fact) in [("moltenvk-m3", true), ("lavapipe", false)] {
         let p = profile(stem, exact_maths()).expect("profile");
@@ -3937,12 +3968,11 @@ fn float_denormals_are_the_devices_and_noted_off_the_device_fact() {
 
 /// `air.sincos` answers the NaN its `sin` and `cos` answer as calls of their own, since Metal's
 /// `sincos` is its `sin` and `cos` word for word (cases 7b283404 and f6524207, every pair): precise
-/// `sin` and `cos` without fast-math flags answer the canonical NaN, so each result selects it
-/// where the device fact does not leave it to the device, and the call notes no
-/// `DeviceNanEncoding`. The cosine is stored, so it is selected even where the sine is not read.
-/// (The interpreter does not model `Sin`; the shape is the module's.)
+/// `sin` and `cos` without fast-math flags answer the canonical NaN, which the device answers where
+/// the profile takes `MetalCanonicalNans`; elsewhere either result, read or not, is noted
+/// `PrecisionNote::NativeNanEncoding`, and neither is selected.
 #[test]
-fn sincos_answers_the_nan_of_sin_and_cos() {
+fn sincos_answers_the_device_s_nan() {
     let kernel = |name: &'static str, read: &str| {
         Kernel {
         name,
@@ -3960,100 +3990,62 @@ fn sincos_answers_the_nan_of_sin_and_cos() {
         kernel("sincos_nan_sine", "%t"),
         kernel("sincos_nan_cosine", "%cv"),
     ];
-    // The selects each kernel's results add where the fact leaves the NaN to the module: the
-    // sine's and the cosine's, then the cosine's alone (the sine is not read).
-    let selects = [2, 1];
-    let text = module(&ks);
-    let Some(bitcode) = assemble("sincos-nan", &text) else {
+    let Some(bitcode) = assemble("sincos-nan", &module(&ks)) else {
         return;
     };
-    for stem in ["moltenvk-m3", "lavapipe"] {
-        for (kk, selects) in ks.iter().zip(selects) {
-            let mut tests = Vec::new();
-            for fact in [true, false] {
-                let p = profile_with_canonical_nans(stem, fact);
-                let what = format!("{} on {stem}, MetalCanonicalNans {fact}", kk.name);
-                let a = compile(&bitcode, kk.name, &p).unwrap_or_else(|e| panic!("{what}: {e:?}"));
-                let (_, words) =
-                    link_and_validate(&a, &p).unwrap_or_else(|e| panic!("{what}: L3: {e}"));
-                assert!(
-                    !a.precision.contains(&PrecisionNote::DeviceNanEncoding),
-                    "{what}: {:?}",
-                    a.precision
-                );
-                let (is_nan, bits) = nan_tests(&words);
-                tests.push(is_nan + bits);
-            }
-            assert_eq!(tests[1], tests[0] + selects, "{} on {stem}", kk.name);
-        }
-    }
+    let unread = ["sincos_nan_sine", "sincos_nan_cosine"];
+    nans_are_the_device_s(&bitcode, &ks, false, &unread, &|_, fact| !fact);
 }
 
-/// A result whose every use drops its NaN's bits (a float comparison, or arithmetic that answers
-/// the canonical NaN itself) needs no select, so a chain of `float` arithmetic tests once, at its
-/// end, and a result only compared tests never.
-#[test]
-fn a_nan_is_selected_only_where_its_bits_are_observed() {
-    let xyz = format!(
-        "{}{}{}",
-        ob("x", 0xFFC0_1234),
-        ob("y", 0x4000_0000),
-        ob("z", 0x7F80_0001)
-    );
-    let ks = [
-        nan_kernel(
-            "nan_single",
-            format!("{xyz}  %s = fadd float %x, %y\n"),
-            Some(0x7FC0_0000),
-        ),
-        nan_kernel(
-            "nan_chain",
-            format!("{xyz}  %p = fmul float %x, %y\n  %q = fsub float %p, %y\n  %s = fadd float %q, %z\n"),
-            Some(0x7FC0_0000),
-        ),
-        k(
-            "nan_compared",
-            format!("{xyz}  %p = fmul float %x, %y\n  %c = fcmp olt float %p, 0.0\n  %r = zext i1 %c to i32\n"),
-            0,
-        ),
-    ];
-    let Some(bitcode) = assemble("nan-observed", &module(&ks)) else {
-        return;
-    };
-    let p = profile("lavapipe", exact_maths()).expect("profile");
-    for (kk, tests) in ks.iter().zip([1, 1, 0]) {
-        let a = compile(&bitcode, kk.name, &p).unwrap_or_else(|e| panic!("{}: {e:?}", kk.name));
-        let (_, words) = link_and_validate(&a, &p).unwrap_or_else(|e| panic!("{}: {e}", kk.name));
-        let (is_nan, bits) = nan_tests(&words);
-        assert_eq!(is_nan + bits, tests, "{}", kk.name);
-        let got = interpret(&bitcode, kk.name, &p);
-        assert_eq!(Some(got), kk.want, "{}: {got:#x}", kk.name);
-    }
-}
-
-/// The select's NaN test is `OpIsNan` only in an entry that declares `SignedZeroInfNanPreserve 32`;
-/// where every float operation carries `nnan`/`ninf`/`nsz` the entry declares nothing, a device may
-/// fold `OpIsNan`, and the test is the bits instead, which still answers Metal's NaN. No module
+/// A NaN test (Metal's `median3`'s) is `OpIsNan` only in an entry that declares
+/// `SignedZeroInfNanPreserve 32`; where every float operation carries `nnan`/`ninf`/`nsz` the entry
+/// declares nothing, a device may fold `OpIsNan`, and the test is the bits instead, which still
+/// answers Metal's NaN. No module
 /// decorates a value `FPFastMathMode`, so nothing tells a device a tested value is no NaN; nor do
 /// the NaN-model probes' fast-math fixtures.
 #[test]
 fn a_nan_test_no_float_mode_folds() {
     let x = ob("x", 0xFFC0_1234);
     let ks = [
+        // A sum's NaN is the device's.
         nan_kernel(
             "strict_fadd",
             format!("{x}  %s = fadd float %x, 1.0\n"),
-            Some(0x7FC0_0000),
+            None,
         ),
         nan_kernel(
             "fast_fadd",
             format!("{x}  %s = fadd fast float %x, 1.0\n"),
-            Some(0x7FC0_0000),
+            None,
         ),
         nan_kernel(
             "fast_round",
             format!("{x}  %s = call fast float @air.fast_round.f32(float %x)\n"),
-            Some(0xFFC0_1234),
+            None,
+        ),
+        // Metal's `median3` returns an operand, a NaN losing, and `sign` `+0` for a NaN, which
+        // the module tests for.
+        nan_kernel(
+            "strict_median3",
+            format!("{x}  %s = call float @air.fmedian3.f32(float %x, float 1.0, float 2.0)\n"),
+            Some(0x3F80_0000),
+        ),
+        nan_kernel(
+            "fast_median3",
+            format!(
+                "{x}  %s = call fast float @air.fmedian3.f32(float %x, float 1.0, float 2.0)\n"
+            ),
+            Some(0x3F80_0000),
+        ),
+        nan_kernel(
+            "strict_sign",
+            format!("{x}  %s = call float @air.sign.f32(float %x)\n"),
+            Some(0),
+        ),
+        nan_kernel(
+            "fast_sign",
+            format!("{x}  %s = call fast float @air.sign.f32(float %x)\n"),
+            Some(0),
         ),
         // The device's `asin` and `tan`, which the interpreter does not evaluate.
         nan_kernel(
@@ -4109,10 +4101,7 @@ fn a_nan_test_no_float_mode_folds() {
             is_nan_tested += usize::from(is_nan > 0);
             if let Some(want) = kk.want {
                 let got = interpret(&bitcode, kk.name, &p);
-                // moltenvk-m3 leaves a sum's NaN to its device; the interpreter is not one.
-                if stem != "moltenvk-m3" || kk.name == "fast_round" {
-                    assert_eq!(got, want, "{what}: {got:#x}");
-                }
+                assert_eq!(got, want, "{what}: {got:#x}");
             }
         }
     }
@@ -4163,59 +4152,57 @@ fn half_nan_kernel(name: &'static str, body: String, want: Option<u32>) -> Kerne
 
 /// Class B: Metal's `half` `+`, `*`, and `air.fma.f16`, with or without fast-math flags, and its
 /// narrowing of a `float` to `half` (`fptrunc`, and `air.convert` from class E's version) answer
-/// the canonical `half` NaN `0x7E00`, which the lowering selects (one NaN test per result, none
-/// where the device fact leaves the canonical class to the device); a chain selects once, at its
-/// end. `half` `-` is class K's, selected the same way. The interpreter's `OpQuantizeToF16` answers
-/// `0x7E00` itself, so the selects are counted against the same kernel compiled with the fact.
+/// the canonical `half` NaN `0x7E00`, as `half` `-` (class K's) does. The NaN is the device's on
+/// every profile, selected nowhere, and noted `PrecisionNote::NativeNanEncoding` where the profile
+/// does not take `MetalCanonicalNans`.
 #[test]
-fn half_nans_answer_metals_half_nan() {
+fn half_nans_answer_the_device_s_nan() {
     let hx = oh("hx", 0xFE01);
     let x = ob("x", 0xFFC0_1234);
     let ks = [
         half_nan_kernel(
             "half_fadd",
             format!("{hx}  %s = fadd half %hx, 0xH3C00\n"),
-            Some(0x7E00),
+            None,
         ),
         half_nan_kernel(
             "half_fmul",
             format!("{hx}  %s = fmul half %hx, 0xH4000\n"),
-            Some(0x7E00),
+            None,
         ),
         half_nan_kernel(
             "half_fma",
             format!("{hx}  %s = call half @air.fma.f16(half %hx, half 0xH3C00, half 0xH0000)\n"),
-            Some(0x7E00),
+            None,
         ),
         half_nan_kernel(
             "narrow",
             format!("{x}  %s = fptrunc float %x to half\n"),
-            Some(0x7E00),
+            None,
         ),
         half_nan_kernel(
             "narrow_then_add",
             format!("{x}  %n = fptrunc float %x to half\n  %s = fadd half %n, 0xH3C00\n"),
-            Some(0x7E00),
+            None,
         ),
         half_nan_kernel(
             "narrow_convert",
             format!(
                 "{x}  %v = insertelement <4 x float> <float 1.0, float 1.0, float 1.0, float 1.0>, float %x, i32 2\n  %w = call <4 x half> @air.convert.f.v4f16.f.v4f32(<4 x float> %v)\n  %s = extractelement <4 x half> %w, i32 2\n"
             ),
-            Some(0x7E00),
+            None,
         ),
         half_nan_kernel(
             "half_fadd_fast",
             format!("{hx}  %s = fadd fast half %hx, 0xH3C00\n"),
-            Some(0x7E00),
+            None,
         ),
         half_nan_kernel(
             "half_fsub",
             format!("{hx}  %s = fsub half %hx, 0xH3C00\n"),
-            Some(0x7E00),
+            None,
         ),
     ];
-    let selects = [1, 1, 1, 1, 1, 1, 1, 1];
     let text = module(&ks).replace(
         DECLS,
         &format!("{DECLS}declare half @air.fma.f16(half, half, half)\ndeclare <4 x half> @air.convert.f.v4f16.f.v4f32(<4 x float>)\n"),
@@ -4223,59 +4210,36 @@ fn half_nans_answer_metals_half_nan() {
     let Some(bitcode) = assemble("nan-half", &text) else {
         return;
     };
-    for stem in ["lavapipe", "moltenvk-m3"] {
-        for (kk, n) in ks.iter().zip(selects) {
-            let mut tests = Vec::new();
-            for fact in [false, true] {
-                let p = profile_with_canonical_nans(stem, fact);
-                let what = format!("{} on {stem}, MetalCanonicalNans {fact}", kk.name);
-                let a = compile(&bitcode, kk.name, &p).unwrap_or_else(|e| panic!("{what}: {e:?}"));
-                let (_, words) =
-                    link_and_validate(&a, &p).unwrap_or_else(|e| panic!("{what}: L3: {e}"));
-                let (is_nan, bits) = nan_tests(&words);
-                tests.push(is_nan + bits);
-                if let Some(want) = kk.want {
-                    let got = interpret(&bitcode, kk.name, &p);
-                    assert_eq!(got, want, "{what}: {got:#x}");
-                }
-            }
-            assert_eq!(tests[0], tests[1] + n, "{} on {stem}", kk.name);
-        }
-    }
+    nans_are_the_device_s(&bitcode, &ks, true, &[], &|_, fact| !fact);
 }
 
 /// Class C: Metal widens a `half` NaN to the canonical `float` NaN `0x7FC00000`, sign and payload
 /// dropped, by `fpext` and by its intrinsic form `air.convert`. A `half` is held widened, so the
 /// widening emits no device operation and every device keeps the payload, MoltenVK included: the
-/// select is emitted whatever the device fact states. The interpreter keeps the payload as a device
-/// would, so the stored bits show the select. A widening only compared needs none.
+/// module selects nothing and notes `PrecisionNote::NativeNanEncoding` whatever the device fact
+/// states. The interpreter keeps the payload as a device would.
 #[test]
-fn a_widened_half_nan_is_canonical_on_every_profile() {
+fn a_widened_half_nan_keeps_its_payload_on_every_profile() {
     let hx = oh("hx", 0xFE01);
     let ks = [
         nan_kernel(
             "widen",
             format!("{hx}  %s = fpext half %hx to float\n"),
-            Some(0x7FC0_0000),
+            None,
         ),
         nan_kernel(
             "widen_vector",
             format!(
                 "{hx}  %v = insertelement <2 x half> <half 0xH3C00, half 0xH3C00>, half %hx, i32 1\n  %w = fpext <2 x half> %v to <2 x float>\n  %s = extractelement <2 x float> %w, i32 1\n"
             ),
-            Some(0x7FC0_0000),
+            None,
         ),
         nan_kernel(
             "widen_convert",
             format!(
                 "{hx}  %v = insertelement <4 x half> <half 0xH3C00, half 0xH3C00, half 0xH3C00, half 0xH3C00>, half %hx, i32 1\n  %w = call <4 x float> @air.convert.f.v4f32.f.v4f16(<4 x half> %v)\n  %s = extractelement <4 x float> %w, i32 1\n"
             ),
-            Some(0x7FC0_0000),
-        ),
-        k(
-            "widen_compared",
-            format!("{hx}  %s = fpext half %hx to float\n  %c = fcmp olt float %s, 0.0\n  %r = zext i1 %c to i32\n"),
-            0,
+            None,
         ),
     ];
     let text = module(&ks).replace(
@@ -4285,35 +4249,17 @@ fn a_widened_half_nan_is_canonical_on_every_profile() {
     let Some(bitcode) = assemble("nan-widen", &text) else {
         return;
     };
-    for stem in ["lavapipe", "moltenvk-m3"] {
-        for fact in [false, true] {
-            let p = profile_with_canonical_nans(stem, fact);
-            for kk in &ks {
-                let what = format!("{} on {stem}, MetalCanonicalNans {fact}", kk.name);
-                let a = compile(&bitcode, kk.name, &p).unwrap_or_else(|e| panic!("{what}: {e:?}"));
-                let (_, words) =
-                    link_and_validate(&a, &p).unwrap_or_else(|e| panic!("{what}: L3: {e}"));
-                let (is_nan, bits) = nan_tests(&words);
-                let selects = usize::from(kk.name != "widen_compared");
-                assert!(is_nan + bits >= selects, "{what}");
-                if kk.name == "widen_compared" {
-                    assert_eq!(is_nan + bits, 0, "{what}");
-                }
-                let got = interpret(&bitcode, kk.name, &p);
-                assert_eq!(Some(got), kk.want, "{what}: {got:#x}");
-            }
-        }
-    }
+    nans_are_the_device_s(&bitcode, &ks, false, &[], &|_, _| true);
 }
 
 /// Class D: Metal's `half` `fneg` and `fabs` answer the canonical `half` NaN `0x7E00`, with or
-/// without fast-math flags. A device computes both exactly on the held value's sign, so the select
-/// is emitted whatever the device fact states: one NaN test more than the same value stored
-/// unchanged, on either profile and in either fact state. An `fadd` whose only use is the `fneg`
-/// selects nothing of its own, and a `fneg` only compared none. The interpreter keeps a `half` NaN's payload through the held value, as a device does (the value
-/// stored unchanged is `0xFE01`), so the stored bits show the select.
+/// without fast-math flags. A device computes both exactly on the held value's sign, so a NaN's
+/// payload is kept on every profile: the module selects nothing and notes
+/// `PrecisionNote::NativeNanEncoding` whatever the device fact states, as for an `fadd` whose only
+/// use is the `fneg`. The interpreter keeps a `half` NaN's payload through the held value, as a
+/// device does (the value stored unchanged is `0xFE01`, and notes nothing).
 #[test]
-fn half_sign_operations_answer_the_canonical_nan_on_every_profile() {
+fn half_sign_operations_keep_a_nan_s_payload_on_every_profile() {
     let hx = oh("hx", 0xFE01);
     let ks = [
         half_nan_kernel(
@@ -4321,62 +4267,33 @@ fn half_sign_operations_answer_the_canonical_nan_on_every_profile() {
             format!("{hx}  %s = freeze half %hx\n"),
             Some(0xFE01),
         ),
-        half_nan_kernel(
-            "half_fneg",
-            format!("{hx}  %s = fneg half %hx\n"),
-            Some(0x7E00),
-        ),
+        half_nan_kernel("half_fneg", format!("{hx}  %s = fneg half %hx\n"), None),
         half_nan_kernel(
             "half_fneg_fast",
             format!("{hx}  %s = fneg fast half %hx\n"),
-            Some(0x7E00),
+            None,
         ),
         half_nan_kernel(
             "half_fabs",
             format!("{hx}  %s = call half @air.fabs.f16(half %hx)\n"),
-            Some(0x7E00),
+            None,
         ),
         half_nan_kernel(
             "half_fabs_fast",
             format!("{hx}  %s = call fast half @air.fabs.f16(half %hx)\n"),
-            Some(0x7E00),
+            None,
         ),
         half_nan_kernel(
             "half_fadd_then_fneg",
             format!("{hx}  %n = fadd half %hx, 0xH3C00\n  %s = fneg half %n\n"),
-            Some(0x7E00),
-        ),
-        k(
-            "half_fneg_compared",
-            format!("{hx}  %n = fneg half %hx\n  %c = fcmp olt half %n, 0xH0000\n  %r = zext i1 %c to i32\n"),
-            0,
+            None,
         ),
     ];
     let text = module(&ks).replace(DECLS, &format!("{DECLS}declare half @air.fabs.f16(half)\n"));
     let Some(bitcode) = assemble("nan-half-sign", &text) else {
         return;
     };
-    for stem in ["lavapipe", "moltenvk-m3"] {
-        for fact in [false, true] {
-            let p = profile_with_canonical_nans(stem, fact);
-            let mut tests = Vec::new();
-            for kk in &ks {
-                let what = format!("{} on {stem}, MetalCanonicalNans {fact}", kk.name);
-                let a = compile(&bitcode, kk.name, &p).unwrap_or_else(|e| panic!("{what}: {e:?}"));
-                let (_, words) =
-                    link_and_validate(&a, &p).unwrap_or_else(|e| panic!("{what}: L3: {e}"));
-                let (is_nan, bits) = nan_tests(&words);
-                tests.push(is_nan + bits);
-                let got = interpret(&bitcode, kk.name, &p);
-                assert_eq!(Some(got), kk.want, "{what}: {got:#x}");
-            }
-            let what = format!("on {stem}, MetalCanonicalNans {fact}: {tests:?}");
-            for t in &tests[1..6] {
-                assert_eq!(*t, tests[0] + 1, "{what}");
-            }
-            assert_eq!(tests[6], 0, "{what}");
-        }
-    }
+    nans_are_the_device_s(&bitcode, &ks, true, &[], &|name, _| name != "half_kept");
 }
 
 /// Class E: Metal's `float` `fneg` and `fabs` (`air.fabs`, `air.fast_fabs`, and `llvm.fabs`, which
@@ -4480,15 +4397,15 @@ fn float_sign_operations_move_the_bits_on_every_profile() {
 
 /// Class F: Metal's `float` `fmin`, `fmax`, `min3`, `max3`, and `clamp`, precise and `fast_` alike,
 /// and `llvm.minnum`/`llvm.maxnum` with every flag (Metal's fast-math `a < b ? a : b`), with none
-/// and with some, answer an operand bit for bit on every profile (`nan_minmax`, `nan_minmax_fast`,
-/// and their zeros-and-denormals cases, every lane; for the other flag states): a NaN loses, two
-/// NaNs and a tie answer the second operand, and a denormal compares as zero but is returned
-/// itself. Off a profile that takes `DriverDeviation::MetalMinMax` no device `NMin`, `NMax`, or
-/// `NClamp` decides it; on one those instructions do, measured to be Metal's (the interpreter
-/// models them so), and the module requires `VkProperty::MetalMinMax`. No
+/// and with some, answer an operand bit for bit (`nan_minmax`, `nan_minmax_fast`, and their
+/// zeros-and-denormals cases, every lane; for the other flag states): a NaN loses, two NaNs and a
+/// tie answer the second operand, and a denormal compares as zero but is returned itself. On every
+/// profile the device's `NMin`, `NMax`, or `NClamp` decides it: where the profile takes
+/// `DriverDeviation::MetalMinMax` measured to be Metal's (the interpreter models them so), and the
+/// module requires `VkProperty::MetalMinMax`; elsewhere noted `PrecisionNote::NativeMinMax`. No
 /// device note is recorded.
 #[test]
-fn float_min_max_answer_metals_operand_on_every_profile() {
+fn float_min_max_are_the_device_s_on_every_profile() {
     let two = |a: u32, b: u32| format!("{}{}", ob("x", a), ob("y", b));
     let three = |a: u32, b: u32, c: u32| format!("{}{}{}", ob("x", a), ob("y", b), ob("z", c));
     let ks = [
@@ -4634,7 +4551,13 @@ fn float_min_max_answer_metals_operand_on_every_profile() {
             let (_, words) =
                 link_and_validate(&a, &p).unwrap_or_else(|e| panic!("{what}: L3: {e}"));
             let device = p.takes_driver_deviation(crate::error::DriverDeviation::MetalMinMax);
-            assert_eq!(device_pick(&words) > 0, device, "{what}");
+            assert!(device_pick(&words) > 0, "{what}");
+            assert_eq!(
+                a.precision.contains(&PrecisionNote::NativeMinMax),
+                !device,
+                "{what}: {:?}",
+                a.precision
+            );
             assert_eq!(
                 a.requirements
                     .properties
@@ -4651,7 +4574,7 @@ fn float_min_max_answer_metals_operand_on_every_profile() {
             // The interpreter reads a denormal operand of `NMin` by its value; Metal's reading, a
             // zero, is the device's, measured by the driver facts and the gate lane
             // (`runtime_lane::driver_deviations`).
-            if device && kk.name.contains("denormal") {
+            if kk.name.contains("denormal") {
                 continue;
             }
             let got = interpret(&bitcode, kk.name, &p);
@@ -4830,14 +4753,14 @@ fn mix_is_metals_fused_form_on_moltenvk_and_the_devices_fmix_elsewhere() {
 
 /// Class K: Metal's `half` functions answer the canonical `half` NaN `0x7E00` with and without
 /// fast-math flags (`nan_half`, `nan_half_fast`): `llvm.fmuladd`, `ldexp` (unlike `float`'s, which
-/// returns the operand), and `sqrt` take one select more where the device fact does not leave the
-/// canonical class to the device. `round` returns a NaN operand itself, a signaling one kept, and
-/// `+0` for a zero result; `asin`'s domain error takes the operand's sign (a select whatever the
-/// fact); and `fract` with every flag answers `0x3BFF` for an infinity, where without flags it
-/// answers `+0`. The interpreter's `OpQuantizeToF16` answers `0x7E00` itself, so the canonical
-/// selects are counted against the same kernel compiled with the fact.
+/// returns the operand), and `sqrt`, which the device answers where the profile takes
+/// `MetalCanonicalNans` and which are noted `PrecisionNote::NativeNanEncoding` elsewhere. `round`
+/// returns a NaN operand itself on Metal, and `asin`'s domain error takes the operand's sign: both
+/// the device's NaN on every profile, noted whatever the fact. None is selected. `round` answers
+/// `+0` for a zero result, and `fract` with every flag answers `0x3BFF` for an infinity, where
+/// without flags it answers `+0`.
 #[test]
-fn half_functions_answer_metals_half_nan() {
+fn half_functions_answer_the_device_s_nan() {
     let hx = oh("hx", 0xFE01);
     let snan = oh("hx", 0x7C01);
     let inf = oh("hx", 0x7C00);
@@ -4848,22 +4771,22 @@ fn half_functions_answer_metals_half_nan() {
             format!(
                 "{hx}  %s = call half @llvm.fmuladd.f16(half %hx, half 0xH3C00, half 0xH0000)\n"
             ),
-            Some(0x7E00),
+            None,
         ),
         half_nan_kernel(
             "half_ldexp",
             format!("{hx}  %s = call half @air.ldexp.f16(half %hx, i32 2)\n"),
-            Some(0x7E00),
+            None,
         ),
         half_nan_kernel(
             "half_sqrt_fast",
             format!("{hx}  %s = call fast half @air.sqrt.f16(half %hx)\n"),
-            Some(0x7E00),
+            None,
         ),
         half_nan_kernel(
             "half_round_snan",
             format!("{snan}  %s = call half @air.round.f16(half %hx)\n"),
-            Some(0x7C01),
+            None,
         ),
         half_nan_kernel(
             "half_round_to_zero",
@@ -4886,8 +4809,6 @@ fn half_functions_answer_metals_half_nan() {
             None,
         ),
     ];
-    // The canonical selects the device fact leaves to the device, per kernel.
-    let left = [1, 1, 1, 0, 0, 0, 0, 0];
     let text = module(&ks).replace(
         DECLS,
         &format!(
@@ -4897,29 +4818,9 @@ fn half_functions_answer_metals_half_nan() {
     let Some(bitcode) = assemble("nan-half-functions", &text) else {
         return;
     };
-    for stem in ["lavapipe", "moltenvk-m3"] {
-        for (kk, n) in ks.iter().zip(left) {
-            let mut tests = Vec::new();
-            for fact in [false, true] {
-                let p = profile_with_canonical_nans(stem, fact);
-                let what = format!("{} on {stem}, MetalCanonicalNans {fact}", kk.name);
-                let a = compile(&bitcode, kk.name, &p).unwrap_or_else(|e| panic!("{what}: {e:?}"));
-                let (_, words) =
-                    link_and_validate(&a, &p).unwrap_or_else(|e| panic!("{what}: L3: {e}"));
-                let (is_nan, bits) = nan_tests(&words);
-                tests.push(is_nan + bits);
-                if let Some(want) = kk.want {
-                    let got = interpret(&bitcode, kk.name, &p);
-                    assert_eq!(got, want, "{what}: {got:#x}");
-                }
-            }
-            assert_eq!(tests[0], tests[1] + n, "{} on {stem}: {tests:?}", kk.name);
-            if kk.name == "half_asin" {
-                assert!(
-                    tests[1] > 0,
-                    "half_asin on {stem}: its domain sign is selected"
-                );
-            }
-        }
-    }
+    nans_are_the_device_s(&bitcode, &ks, true, &["half_asin"], &|name, fact| {
+        name.starts_with("half_round")
+            || name == "half_asin"
+            || (!name.starts_with("half_fract") && !fact)
+    });
 }
