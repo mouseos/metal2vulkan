@@ -667,9 +667,9 @@ pub enum PrecisionNote {
     /// `SignedZeroInfNanPreserve`, which the device does not support at their width. Under
     /// `FloatMathsPolicy::Exact` so does an operation that answers Metal's zero of its sign: a
     /// fused multiply-add the translation computes itself (in `double` or in integers without
-    /// `OpFmaKHR`, and a `half` one through `float`), one by `OpFmaKHR` whose result is at most
-    /// `2^-126` in magnitude, and a `float` product flushed below `2^-126`. Without the mode the
-    /// device may answer such a zero with either sign.
+    /// `OpFmaKHR`), one by `OpFmaKHR` whose result is at most `2^-126` in magnitude, and a `float`
+    /// product flushed below `2^-126`. Without the mode the device may answer such a zero with
+    /// either sign.
     DeviceSignedZeroInfNan,
     /// A ray intersection traversed by the device's ray query. The hit distance and the
     /// barycentrics are the device's arithmetic. The conventions no Metal reading has settled yet
@@ -1692,12 +1692,12 @@ pub enum PrecisionNote {
     /// once more: within one unit in the last place of the `half` result. Validation derives no
     /// tolerance from it.
     NativeDivision,
-    /// Native device maths: a `float` fused multiply-add on a device without `OpFmaKHR`, or a
-    /// `half` one where the device's 16-bit `Fma` is not measured to be Metal's and the device has
-    /// no 16-bit `OpFmaKHR` under the 16-bit float controls, is the device's `GLSL.std.450 Fma`
-    /// (on the `half` operands held in `float`, its result rounded to `half`),
-    /// not the translation's correctly rounded routine, under `FloatMathsPolicy::Native` (the
-    /// default). **Recorded bound:** a `half` result within one unit in its last place of
+    /// Native device maths: a `float` fused multiply-add on a device without `OpFmaKHR`, under
+    /// `FloatMathsPolicy::Native` (the default), not the translation's correctly rounded routine,
+    /// or a `half` one, under every policy, where the device's 16-bit `Fma` is not measured to be
+    /// Metal's and the device has no 16-bit `OpFmaKHR` under the 16-bit float controls, is the
+    /// device's `GLSL.std.450 Fma` (on the `half` operands held in `float`, its result rounded to
+    /// `half`). **Recorded bound:** a `half` result within one unit in its last place of
     /// Metal's (the product of two `half` values is exact in `float`, so only the two roundings
     /// differ); a `float` one within half a unit in the last place of the product plus half a
     /// unit in the last place of the result (Vulkan lets `Fma` round the product and then the

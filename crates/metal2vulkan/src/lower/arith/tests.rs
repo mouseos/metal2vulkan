@@ -2522,11 +2522,12 @@ fn half_nan_answers_follow_the_measured_states() {
 }
 
 /// The float facts of a profile whose `float` fused multiply-add is `OpFmaKHR`, checked by the
-/// integer routine, whose `half` one is the routine, and whose `float` functions are the device's.
+/// integer routine, whose `half` one is the device's `float` `Fma`, and whose `float` functions are
+/// the device's.
 const KHR_FACTS: super::FloatFacts = super::FloatFacts {
     routes: super::fma::Routes {
         float: super::fma::Route::Khr,
-        half: super::fma::Route::HalfOdd,
+        half: super::fma::Route::Native,
         tiny: Some(super::fma::Route::Soft),
     },
     reciprocal: super::divide::Reciprocal::Rounded,

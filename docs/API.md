@@ -2669,9 +2669,9 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   infinities, and NaNs run without `SignedZeroInfNanPreserve`, which the device does not support at
   their width. Under `FloatMathsPolicy::Exact` so does an operation that answers Metal's zero of
   its sign: a fused multiply-add the translation computes itself (in `double` or in integers
-  without `OpFmaKHR`, and a `half` one through `float`), one by `OpFmaKHR` whose result is at most
-  `2^-126` in magnitude, and a `float` product flushed below `2^-126`. Without the mode the device
-  may answer such a zero with either sign.
+  without `OpFmaKHR`), one by `OpFmaKHR` whose result is at most `2^-126` in magnitude, and a
+  `float` product flushed below `2^-126`. Without the mode the device may answer such a zero with
+  either sign.
 - `metal2vulkan-degrade-device-ray-intersection` (precision).
   `PrecisionNote::DeviceRayIntersection`: A ray intersection traversed by the device's ray query.
 - `metal2vulkan-degrade-fast-math-rewrites` (precision). `PrecisionNote::FastMathRewrites`: Float
@@ -3059,11 +3059,11 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   device's `OpFDiv`, not the translation's correctly rounded routine or its `RN(1 / y)`, on a device
   whose division is not Metal's own, under `FloatMathsPolicy::Native` (the default).
 - `metal2vulkan-degrade-native-fma` (precision). `PrecisionNote::NativeFma`: Native device maths: a
-  `float` fused multiply-add on a device without `OpFmaKHR`, or a `half` one where the device's
-  16-bit `Fma` is not measured to be Metal's and the device has no 16-bit `OpFmaKHR` under the
-  16-bit float controls, is the device's `GLSL.std.450 Fma` (on the `half` operands held in
-  `float`, its result rounded to `half`), not the translation's correctly rounded routine, under
-  `FloatMathsPolicy::Native` (the default).
+  `float` fused multiply-add on a device without `OpFmaKHR`, under `FloatMathsPolicy::Native` (the
+  default), not the translation's correctly rounded routine, or a `half` one, under every policy,
+  where the device's 16-bit `Fma` is not measured to be Metal's and the device has no 16-bit
+  `OpFmaKHR` under the 16-bit float controls, is the device's `GLSL.std.450 Fma` (on the `half`
+  operands held in `float`, its result rounded to `half`).
 - `metal2vulkan-degrade-device-texel-conversion` (precision).
   `PrecisionNote::DeviceTexelConversion`: Native device sampling (a texel conversion): the module
   hands a read, sample or gather with a `float` result the device's own conversion of the texel's

@@ -2193,9 +2193,10 @@ degradations! {
         /// last place.
         NativeDivision = "native-division";
         /// Class: native device maths. The device's `GLSL.std.450 Fma` answers a `half` fused
-        /// multiply-add, or a `float` one on a device without `OpFmaKHR`, where the correctly
-        /// rounded routine would (`FloatMathsPolicy::Native`, the default; `Exact` keeps Metal's).
-        /// Recorded bound: a `half` result within one unit in its last place of Metal's; a
+        /// multiply-add on a device whose 16-bit `Fma` is not measured to be Metal's and that has
+        /// no 16-bit `OpFmaKHR` under the 16-bit float controls, on every policy, or a `float` one
+        /// on a device without `OpFmaKHR`, where the correctly rounded routine would
+        /// (`FloatMathsPolicy::Native`, the default; `Exact` keeps Metal's). Recorded bound: a `half` result within one unit in its last place of Metal's; a
         /// `float` one within half a unit in the last place of the product plus half a unit in
         /// the last place of the result.
         NativeFma = "native-fma";

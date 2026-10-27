@@ -26,9 +26,9 @@
 //! controls of [`QuantizeForm::Controlled`], which make it so by the Vulkan spec and which the
 //! entry then declares ([`computes_in_16_bits`]). For `+ - * /` and square root the double
 //! rounding (the exact result to `f32`, then to the narrow format) is innocuous, because `f32`
-//! carries at least `2p + 2` significand bits for both formats; a `half` fused multiply-add is not,
-//! so it rounds its exact `f32` sum to odd first (`super::fma`), and a `bfloat` one is corrected
-//! ([`bf16_fma`]).
+//! carries at least `2p + 2` significand bits for both formats; a `half` fused multiply-add's is
+//! not, so it is the device's 16-bit one where that is Metal's, and else the device's `f32` one
+//! rounded to `half`, noted (`super::fma`), and a `bfloat` one is corrected ([`bf16_fma`]).
 //!
 //! Every other crossing is exact: [`to_bits`] and [`from_bits`] move between a value and its
 //! format bits with integer sequences and, for a half denormal, one exact scaling by `2^±24`

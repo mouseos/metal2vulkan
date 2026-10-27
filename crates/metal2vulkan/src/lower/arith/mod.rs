@@ -1091,12 +1091,11 @@ pub fn routine_words(plan: &ArithPlan) -> impl Iterator<Item = (&'static str, u6
     plan.divides
         .iter()
         .map(|d| (wide::DIVIDE, u64::from(d.words())))
-        .chain(plan.fmas.iter().map(|r| {
-            (
-                r.name(),
-                u64::from(r.words_among(&plan.fmas, plan.quantize)),
-            )
-        }))
+        .chain(
+            plan.fmas
+                .iter()
+                .map(|r| (r.name(), u64::from(r.words_among(&plan.fmas)))),
+        )
         .chain(
             plan.precise
                 .iter()
@@ -1212,7 +1211,7 @@ pub fn finish(cx: &mut SelectCx<'_>) -> Result<(), Error> {
     cx.families.arith.libm_fma = fma::float_route(cx.profile) == fma::Route::Khr;
     let arith = &mut cx.families.arith;
     // Every family selected its fused multiply-adds by now (a cube position's at selection).
-    fma::complete(&mut arith.fmas, arith.quantize);
+    fma::complete(&mut arith.fmas);
     // The measured device fact, never the driver's name.
     arith.metal_functions = match cx.profile.fields().float_functions {
         FloatFunctions::Metal => Some(libm::module_mode(&arith.modes)),

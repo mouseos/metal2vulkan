@@ -1216,9 +1216,10 @@ fn wide_divisions_share_one_routine_per_form() {
 /// routine calls the one-lane routine on each lane. A1 case 52343cc4's lane (`a = 1 + 2^-23`, `b =
 /// 1 - 2^-24`, `c = -RN(a * b)`), on one lane and on a vector's first, gives the product's rounding
 /// error, which an unfused `Fma` loses; a `half` triple whose `float` sum is a `half` midpoint
-/// gives the once-rounded `half`: through the shared `half` routine (lavapipe, vk12-floor), or
-/// inline as the device's 16-bit `Fma`, which the driver computes as Metal's `half` `fma`
-/// (moltenvk-m3). No module notes `DeviceArithmetic` or `F16FmaDoubleRounding`.
+/// gives the once-rounded `half` inline as the device's 16-bit `Fma`, which the driver computes as
+/// Metal's `half` `fma` (moltenvk-m3), and elsewhere (lavapipe, vk12-floor) is the device's
+/// `float` `Fma` rounded to `half`, inline too, noted `NativeFma`, within one unit in the last place
+/// of the `half`. No module notes `DeviceArithmetic` or `F16FmaDoubleRounding`.
 #[test]
 fn fused_multiply_adds_round_once_on_every_route() {
     let (a, b) = (1.0f32 + f32::EPSILON, 1.0f32 - f32::EPSILON / 2.0);
@@ -1267,12 +1268,12 @@ fn fused_multiply_adds_round_once_on_every_route() {
     };
     // (profile, OpFmaKHR, functions, calls) of the float kernel: the entry and one routine per
     // lane count (scalar, two lanes), one call per use, and the two-lane routine's call per lane.
-    // And (functions, calls) of the half kernel: the entry and the `half` routine's call, or the
-    // entry alone.
-    for (stem, khr, functions, calls, half) in [
-        ("moltenvk-m3", 3, 1, 0, (1, 0)),
-        ("lavapipe", 0, 3, 5, (2, 1)),
-        ("vk12-floor", 0, 3, 5, (2, 1)),
+    // And whether the half kernel's is the device's `float` `Fma` rounded to `half`, the entry
+    // alone either way.
+    for (stem, khr, functions, calls, native_half) in [
+        ("moltenvk-m3", 3, 1, 0, false),
+        ("lavapipe", 0, 3, 5, true),
+        ("vk12-floor", 0, 3, 5, true),
     ] {
         let p = profile(stem, exact_maths()).expect("profile");
         for kk in &ks {
@@ -1303,12 +1304,27 @@ fn fused_multiply_adds_round_once_on_every_route() {
                         count_op(&words, crate::spv::Op::Function),
                         count_op(&words, crate::spv::Op::FunctionCall)
                     ),
-                    half,
+                    (1, 0),
                     "{what}: functions, calls"
+                );
+                assert_eq!(
+                    a.precision.contains(&PrecisionNote::NativeFma),
+                    native_half,
+                    "{what}: {:?}",
+                    a.precision
                 );
             }
             let got = interpret(&bitcode, kk.name, &p);
-            assert_eq!(Some(got), kk.want, "{what}: {got:#x}");
+            if kk.name == "fma_half_rounds_once" && native_half {
+                let want = f32::from_bits(kk.want.expect("want"));
+                let ulp = 2f32.powi(-10);
+                assert!(
+                    (f32::from_bits(got) - want).abs() <= ulp,
+                    "{what}: {got:#x} beyond one ulp of {want}"
+                );
+            } else {
+                assert_eq!(Some(got), kk.want, "{what}: {got:#x}");
+            }
         }
     }
 }
@@ -2997,9 +3013,9 @@ fn narrow_float_module_growth_is_bounded() {
 ///
 /// The chain: one `fptrunc`, eight `fadd`, and eight `fmul` on `half`, strict and `fast`. The
 /// `fast` chain's seven multiplies whose one use is the next addition are fused into it: each pair
-/// is a call of the module's one `half` fused multiply-add routine, whose single rounding carries
+/// is the device's `float` `Fma` rounded to `half` (`fma::Route::Native`), whose rounding carries
 /// the denormal arithmetic as a product's does, so the chain keeps the first addition's, the last
-/// multiply's, the conversion's, and the routine's roundings. On a profile whose driver computes a
+/// multiply's, the conversion's, and each pair's roundings. On a profile whose driver computes a
 /// 16-bit `Fma` as Metal's `half` `fma` (moltenvk-m3) each pair is that `Fma` instead, inline, on
 /// its operands converted to 16 bits and its result widened, all exactly (four `OpFConvert`, the
 /// module's one 16-bit float type), so the chain keeps the other three roundings. On a profile
@@ -3057,7 +3073,7 @@ fn half_rounding_follows_the_operation() {
                 );
             let (q, c, r) = match (kk.name == "fast_chain", f16) {
                 (true, true) => (3, 7 * 4, 2),
-                (true, false) => (4, 0, 3),
+                (true, false) => (10, 0, 9),
                 (false, _) => (17, 0, 9),
             };
             // With `shaderFloat16` each rounding is the device's conversion and its widening, with
@@ -3229,8 +3245,8 @@ fn no_rounding_requires_the_conversion_fact() {
 /// half skips the denormal arithmetic. A square root and `fract`'s difference round through
 /// `OpQuantizeToF16` alone, and an integer converted to `half` rounds by integer arithmetic with
 /// neither; a transcendental,
-/// `ldexp`, a quotient, and the one rounding of a fused sum (`fmuladd`, and `mix`'s two fused
-/// multiply-adds, which call the module's one `half` routine) keep one `RoundEven` each, since
+/// `ldexp`, a quotient, and the rounding of each fused sum (`fmuladd`'s, and `mix`'s two fused
+/// multiply-adds', each the device's `float` `Fma` rounded to `half`) keep one `RoundEven` each, since
 /// their `f32` result below `2^-14` is off the `2^-24` grid (half `exp(-10)` is about `4.54e-5`).
 /// The counts pin which steps may take `round_exact_below_normal`. On a profile whose driver
 /// computes a 16-bit `Fma` as Metal's `half` `fma` (moltenvk-m3), a fused sum rounds nothing
@@ -3261,8 +3277,8 @@ fn only_an_exact_half_result_skips_the_denormal_rounding() {
         (
             "half_mix",
             "call half @air.mix.f16(half %h, half %g, half %u)",
-            1,
-            1,
+            2,
+            2,
         ),
         (
             "half_fmuladd",
@@ -3506,14 +3522,14 @@ fn float_ops_without_fast_flags_preserve_signed_zero_inf_nan() {
 }
 
 /// Under `FloatMathsPolicy::Exact` a fused multiply-add the translation computes by a routine (in
-/// `double` or in integers without `OpFmaKHR`, a `half` one through `float`, and a checked
-/// `OpFmaKHR`'s small results) answers Metal's zero of its sign through float instructions, so a
-/// `fast` entry that calls one declares `SignedZeroInfNanPreserve` at 32 bits, and at 64 for a
-/// routine in `double`, where the profile supports it, else notes `DeviceSignedZeroInfNan`: without
-/// the mode Vulkan lets a device answer a zero of either sign (Metal's `fma(+0, 100, +0)` is `+0`).
-/// Nothing else in the kernels needs the mode: their operands are bits, their calls `fast`. Where
-/// the profile's functions are Metal's own (MoltenVK), and under the default policy, neither kernel
-/// declares it.
+/// `double` or in integers without `OpFmaKHR`, and a checked `OpFmaKHR`'s small results) answers
+/// Metal's zero of its sign through float instructions, so a `fast` entry that calls one declares
+/// `SignedZeroInfNanPreserve` at 32 bits, and at 64 for a routine in `double`, where the profile
+/// supports it, else notes `DeviceSignedZeroInfNan`: without the mode Vulkan lets a device answer a
+/// zero of either sign (Metal's `fma(+0, 100, +0)` is `+0`). A `half` one calls no routine, so its
+/// kernel never declares it. Nothing else in the kernels needs the mode: their operands are bits,
+/// their calls `fast`. Where the profile's functions are Metal's own (MoltenVK), and under the
+/// default policy, neither kernel declares it.
 #[test]
 fn fused_multiply_add_routines_keep_zero_signs() {
     use crate::lower::arith::fma::{self, Route};
@@ -3573,7 +3589,7 @@ fn fused_multiply_add_routines_keep_zero_signs() {
                 let double = r.float == Route::Wide || r.tiny == Some(Route::Wide);
                 (r.float, [routine, double])
             } else {
-                (r.half, [r.half == Route::HalfOdd, false])
+                (r.half, [false, false])
             };
             let wanted = routine.map(|w| w && exact);
             let a = compile(&bitcode, kk.name, &p).unwrap_or_else(|e| panic!("{what}: {e:?}"));
@@ -3594,12 +3610,7 @@ fn fused_multiply_add_routines_keep_zero_signs() {
             );
         }
     }
-    for want in [
-        (Route::Wide, 32),
-        (Route::Wide, 64),
-        (Route::Soft, 32),
-        (Route::HalfOdd, 32),
-    ] {
+    for want in [(Route::Wide, 32), (Route::Wide, 64), (Route::Soft, 32)] {
         assert!(kept.contains(&want), "no profile keeps {want:?}: {kept:?}");
     }
     for (stem, p) in committed_profiles_with(DevicePolicy::default()).expect("profiles") {
