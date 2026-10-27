@@ -2828,7 +2828,8 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   conversion Metal was not measured with (the packed 16-bit unorm formats, `A8Unorm`, the packed
   floats). Near a tie between two codes the device may store the other one. Also a `float` texel a
   function writes to a storage texture that may hold a normalized or half-float format, or
-  `ARGB8Unorm`, on a device not measured to store Metal's codes.
+  `ARGB8Unorm`, on a device not measured to store Metal's codes (or a 1-bit alpha, on one measured
+  to store every other normalized channel's).
 - `metal2vulkan-degrade-device-interpolation` (precision). `PrecisionNote::DeviceInterpolation`: A
   fragment function reads a varying the device interpolates (`center_perspective`, `centroid`,
   `sample` or `no_perspective`, not `flat`) on a device not measured to interpolate as Metal does

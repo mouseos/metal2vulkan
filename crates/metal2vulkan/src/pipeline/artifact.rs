@@ -1200,8 +1200,9 @@ pub enum PrecisionNote {
     /// Also: a function writes a `float` (or `half`) texel to a storage texture that may hold a
     /// normalized or half-float format, or `ARGB8Unorm`, which the device converts where it is not
     /// measured to store Metal's codes (`DriverDeviation::MetalNormStorageWrites`,
-    /// `MetalHalfStorageWrites`): Metal stores each normalized channel's exact product rounded with
-    /// a tie away from zero (a 1-bit channel 1 only above one half) and a half rounded toward zero.
+    /// `MetalHalfStorageWrites`; a 1-bit alpha on a device measured to store every other
+    /// normalized channel's): Metal stores each normalized channel's exact product rounded with a
+    /// tie away from zero (a 1-bit channel 1 only above one half) and a half rounded toward zero.
     ///
     /// Also: a blend into a packed 16-bit unorm attachment (`B5G6R5Unorm`, `A1BGR5Unorm`,
     /// `ABGR4Unorm`, `BGR5A1Unorm`) reads what the device's attachment holds, its channels' codes,

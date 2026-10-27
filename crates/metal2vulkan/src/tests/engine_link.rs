@@ -899,14 +899,6 @@ fn mode_two_refuses_fragment_texture_writes_it_would_round() {
             ),
             (
                 "tob_write",
-                choice(
-                    vk::Format::R16G16B16A16_SFLOAT,
-                    StorageImageClass::HalfTowardZero,
-                ),
-                Goes::Declared,
-            ),
-            (
-                "tob_write",
                 choice(vk::Format::B10G11R11_UFLOAT_PACK32, identity),
                 Goes::Declared,
             ),

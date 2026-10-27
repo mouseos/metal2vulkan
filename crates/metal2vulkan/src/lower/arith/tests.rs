@@ -4112,7 +4112,6 @@ mod half_texel;
 mod libm;
 mod libm_exp;
 mod narrow;
-mod norm_write;
 mod round_texel;
 mod snapshot_codes;
 mod specials;

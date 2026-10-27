@@ -1447,7 +1447,8 @@ pub enum StorageImageClass {
     /// [`SwizzleBgra`]: StorageImageClass::SwizzleBgra
     SrgbEncodeBgra,
     /// An `ARGB8Unorm` image (alpha in byte 0, then red, green, and blue) viewed as
-    /// `R8G8B8A8_UNORM`: the shader rotates the channels.
+    /// `R8G8B8A8_UNORM`: the shader rotates the channels, and the device converts a written
+    /// value.
     RotateArgb,
     /// An `A8Unorm` texture held in `R8_UNORM` (`metal::format::FormatEmulation::AlphaInRed`):
     /// a read is the byte as alpha, `(0, 0, 0, r)`, and a write stores the texel's alpha, as
@@ -1455,14 +1456,9 @@ pub enum StorageImageClass {
     /// texels and `read_write` access).
     AlphaInRed,
     /// A half-float image (`R16Float`, `RG16Float`, `RGBA16Float`) written by a device not
-    /// measured to round a `float` texel as Metal does: the shader rounds each written `float`
-    /// channel toward zero to the `half` Metal stores (a finite value past 65504 to 65504, an
-    /// infinity kept, a NaN to `0x7fc00000`), which the device then stores exactly. A `half`
-    /// texel is written as it is, and reads are `Identity`'s.
-    HalfTowardZero,
-    /// A half-float image written by a device measured to round a `float` texel as Metal does
-    /// but not to store every NaN as Metal's `0x7e00`: the shader writes a `float` channel's NaN
-    /// as `0x7fc00000`, every other value as computed. Reads are `Identity`'s.
+    /// measured to store every NaN as Metal's `0x7e00`: the shader writes a `float` channel's NaN
+    /// as `0x7fc00000`, every other value as computed, which the device's conversion rounds. A
+    /// `half` texel is written as it is, and reads are `Identity`'s.
     HalfQuietNan,
     /// A 4:4:4 two-plane YCbCr texture a slot only writes, through an `R32G32B32A32_UINT` image
     /// of the texture's own (the consumer's write shadow): the shader writes each texel as the
@@ -1476,13 +1472,6 @@ pub enum StorageImageClass {
     /// as Metal does; RADV and NVIDIA keep another NaN's payload bits. A `half` texel is written
     /// as it is, and reads are `Identity`'s.
     SmallFloatQuietNan,
-    /// A unorm image with a 1-bit alpha (`A1BGR5Unorm`, `BGR5A1Unorm`) written on a device
-    /// measured to store every other normalized channel as Metal does
-    /// (`DriverDeviation::MetalNormStorageWrites`) but to round a 1-bit channel's half up: the
-    /// shader writes a `float` or `half` texel's alpha as `1.0` above one half and `0.0`
-    /// elsewhere (a NaN 0), the code Metal stores, every other channel as computed. Reads are
-    /// `Identity`'s.
-    OneBitAlpha,
     /// A half-float image (`R16Float`, `RG16Float`, `RGBA16Float`) a slot writes, and may read,
     /// on a device not measured to store a written `half`'s NaN as its bits
     /// (`DriverDeviation::MetalHalfTexelWrites`), viewed through its unsigned integer alias of
