@@ -305,11 +305,12 @@ fn float_arithmetic(words: &[u32]) -> Vec<(u32, bool)> {
 }
 
 /// `air.fast_tanh` is one operation to Metal, so the device may not fuse or regroup any of its
-/// steps with the caller's arithmetic. Every step is `NoContraction` whatever the call's flags: `x
-/// · 2 log2 e` (in the profile's form: `GLSL.std.450 Fma(a, b, -0.0)` where its `float` functions
-/// are Metal's, an `OpFMul` elsewhere), `t - 1`, `t + 1`, and the quotient. The caller's `fast`
-/// arithmetic stays undecorated. Without the decorations, Mesa's `lower_flrp` rule turned GELU's `1 + tanh` into
-/// `t` on RADV and x86 lavapipe (RC3 cases e72f550f and 2d5f3949, `gelu(-8)`).
+/// steps with the caller's arithmetic. Every step is `NoContraction` whatever the call's flags:
+/// `x · 2 log2 e` (in the profile's form: `GLSL.std.450 Fma(a, b, -0.0)` where its `float`
+/// functions are Metal's, an `OpFMul` elsewhere), `t - 1`, `t + 1`, and the quotient. The caller's
+/// `fast` arithmetic stays undecorated. Without the decorations, Mesa's `lower_flrp` rule turned
+/// GELU's `1 + tanh` into `t` on RADV and x86 lavapipe (RC3 cases e72f550f and 2d5f3949,
+/// `gelu(-8)`).
 #[test]
 fn fast_tanh_is_one_operation() {
     let Some(bitcode) = assemble() else {

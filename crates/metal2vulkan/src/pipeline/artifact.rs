@@ -627,10 +627,12 @@ pub enum PrecisionNote {
     /// than two to four lanes, whose chunks' products the device sums where Metal flushes each one
     /// below `2^-126`, beside their own notes, and a conversion to or from `double`, whose reading
     /// Metal's is not measured. The operations that read a denormal on its bits answer Metal on
-    /// every device: `ldexp`, the minimum and maximum functions (`llvm.minnum` and `llvm.maxnum`
-    /// among them, with any flags), `sign`, `saturate`, `fract`, `copysign`, `fabs` and `atan2`;
-    /// and so do the functions the device answers as Metal's own. Validation derives no tolerance and no
-    /// explanation from it: every `float` computation is exposed to it.
+    /// every device: `ldexp`, `sign`, `fract`, `copysign`, `fabs` and `atan2`; and so do the
+    /// functions the device answers as Metal's own. Where the minimum and maximum functions
+    /// (`llvm.minnum` and `llvm.maxnum` among them, with any flags) and `saturate` are the device's
+    /// `NMin`, `NMax` and `NClamp`, their pick of a denormal is
+    /// [`PrecisionNote::NativeMinMax`]'s. Validation derives no tolerance and no explanation from
+    /// it: every `float` computation is exposed to it.
     DeviceDenormals,
     /// Pixel-coordinate samplers scale coordinates in the shader, rounding differently.
     /// Recorded for an access through a runtime sampler slot whose word may state pixel

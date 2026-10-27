@@ -319,7 +319,8 @@ fn policy(options: &BTreeMap<String, String>) -> Result<DevicePolicy, String> {
             "nan_and_min_max" => policy.nan_and_min_max = NanMinMaxPolicy::Exact,
             _ => {
                 return Err(format!(
-                    "--policy {name:?}: exact-answers, sampling, ycbcr_filter, texel_conversion                      or nan_and_min_max"
+                    "--policy {name:?}: exact-answers, sampling, ycbcr_filter, texel_conversion \
+                     or nan_and_min_max"
                 ))
             }
         }

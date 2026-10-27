@@ -1013,18 +1013,18 @@ impl FloatFn {
     /// reads a denormal operand as the zero of its sign and flushes a denormal result on the bits,
     /// and `fast::sqrt`, which selects the zero of a denormal operand's sign and has no denormal
     /// result. The arc tangent family (`asin`, `acos`, and `atan`, both modes), precise `sin`,
-    /// `cos`, and `tan`, `sinpi`, `cospi`, and `tanpi`, and the second stage's functions are
-    /// listed where the device's instruction is Metal's own function; where it is not, the call
-    /// records the device's denormals with its precision (`PrecisionNote::NativeTranscendentals`).
+    /// `cos`, and `tan`, `sinpi`, `cospi`, and `tanpi`, and the second stage's functions are listed
+    /// where the device's instruction is Metal's own function; where it is not, the call records
+    /// the device's denormals with its precision (`PrecisionNote::NativeTranscendentals`).
     /// `fast::sin`, `fast::cos`, and `fast::tan` keep a denormal operand as Metal does, where RADV,
     /// ANV, and NVIDIA flush it (case cc234732), and the fast formulas' steps have no denormal
     /// intermediate on which their result depends (`fast::sinh` of a denormal is
     /// `(1 - 1) · 0.5 = +0`, as Metal answers, case f6524207). `fast::atan2` does not: its quotient
     /// is the device's division, whose operands `denormal::coverage` reads. `round` answers `+0`
-    /// for every zero it reaches, whatever zero the device's `Trunc` gives a denormal, which Metal's
-    /// `round` of a denormal is (the denormal probes, both modes); precise `fmod` on `float` is the
-    /// remainder's routine, which reads a denormal divisor as a zero on the bits and computes the
-    /// remainder in integers (`libm::fmod`), or on MoltenVK Metal's own.
+    /// for every zero it reaches, whatever zero the device's `Trunc` gives a denormal, which
+    /// Metal's `round` of a denormal is (the denormal probes, both modes); precise `fmod` on
+    /// `float` is the remainder's routine, which reads a denormal divisor as a zero on the bits and
+    /// computes the remainder in integers (`libm::fmod`), or on MoltenVK Metal's own.
     pub fn metal_denormals(self) -> bool {
         use FloatFn as F;
         matches!(
@@ -1247,8 +1247,9 @@ impl FloatFn {
             FloatFn::Atan2 => 320,
             // The quotient, its special values and sign, and the turn.
             FloatFn::FastAtan2 { .. } => 400,
-            // The period reduction, the exact axis arms, both quadrant selections, `tanpi`'s quarter
-            // turns, and the finiteness guard around the device's `Sin` and `Cos` (`pi_scaled`).
+            // The period reduction, the exact axis arms, both quadrant selections, `tanpi`'s
+            // quarter turns, and the finiteness guard around the device's `Sin` and `Cos`
+            // (`pi_scaled`).
             FloatFn::SinPi
             | FloatFn::CosPi
             | FloatFn::TanPi
@@ -1300,11 +1301,12 @@ impl FloatFn {
     }
 }
 
-/// Emit float function `op` on `args` (floats of form `f`; `Ldexp`'s exponent is a held `i32`
-/// and `Dot` gives the scalar), by the device's instructions, and precise `fmod` by `lib`'s
-/// routine where the module defines it. Metal's operand-picking functions (`metal_min_max`, `metal_median3`) test
-/// their operands for NaNs by `test`, the test the entry's float modes leave exact
-/// ([`NanTest::for_modes`]). A `half` `fmod` answers Metal's zero remainder (`half_fmod_zero`).
+/// Emit float function `op` on `args` (floats of form `f`; `Ldexp`'s exponent is a held `i32` and
+/// `Dot` gives the scalar), by the device's instructions, and precise `fmod` by `lib`'s routine
+/// where the module defines it. Metal's operand-picking functions (`metal_min_max`,
+/// `metal_median3`) test their operands for NaNs by `test`, the test the entry's float modes leave
+/// exact ([`NanTest::for_modes`]). A `half` `fmod` answers Metal's zero remainder
+/// (`half_fmod_zero`).
 pub fn float_fn(
     fb: &mut FunctionBuilder<'_>,
     op: FloatFn,

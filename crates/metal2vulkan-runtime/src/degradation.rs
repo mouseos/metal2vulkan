@@ -2111,19 +2111,19 @@ degradations! {
         /// selection, anisotropy, cube maps, 3D textures, gathers, comparisons and offsets are
         /// not measured.
         DeviceSampling = "device-sampling";
-        /// Class: native device maths. The device's `GLSL.std.450` instruction answers a `float`
-        /// or `half` math-library call that is not Metal's own function on the device, and the
-        /// device's `Sqrt` answers `fast::sqrt`, Metal's `x · rsqrt(x)`. Recorded bound: Vulkan's precision table
-        /// for the instruction: `Exp2` and `Exp` 3 + 2·|x| ulp; `Log2` and `Log` 3 ulp outside
-        /// `[0.5, 2]`, `2^-21` absolute inside; `Pow` from `Exp2(y · Log2(x))`; `Sqrt` from `1 /
-        /// InverseSqrt`; `InverseSqrt` 2 ulp; `Sin` and `Cos` `2^-11` absolute in `[-π, π]`; `Tan`
-        /// from `Sin / Cos`; `Asin`, `Acos`, `Atan` and `Atan2` 4096 ulp.
+        /// Class: native device maths. The device's `GLSL.std.450` instruction answers a `float` or
+        /// `half` math-library call that is not Metal's own function on the device, and the
+        /// device's `Sqrt` answers `fast::sqrt`, Metal's `x · rsqrt(x)`. Recorded bound: Vulkan's
+        /// precision table for the instruction: `Exp2` and `Exp` 3 + 2·|x| ulp; `Log2` and `Log` 3
+        /// ulp outside `[0.5, 2]`, `2^-21` absolute inside; `Pow` from `Exp2(y · Log2(x))`; `Sqrt`
+        /// from `1 / InverseSqrt`; `InverseSqrt` 2 ulp; `Sin` and `Cos` `2^-11` absolute in
+        /// `[-π, π]`; `Tan` from `Sin / Cos`; `Asin`, `Acos`, `Atan` and `Atan2` 4096 ulp.
         NativeTranscendentals = "native-transcendentals";
         /// Class: native device maths. The device's `OpFDiv` answers a precise or fast `float` or
         /// `half` division, where Metal's is its correctly rounded quotient or its `x` times its
-        /// fast reciprocal. Recorded bound: 2.5 ulp of the quotient (a precise division's operands past a divisor of
-        /// `2^126` scaled into Vulkan's range exactly); a `half` quotient within one unit in its
-        /// last place.
+        /// fast reciprocal. Recorded bound: 2.5 ulp of the quotient (a precise division's operands
+        /// past a divisor of `2^126` scaled into Vulkan's range exactly); a `half` quotient within
+        /// one unit in its last place.
         NativeDivision = "native-division";
         /// Class: native device maths. The device's `GLSL.std.450 Fma` answers a `half` fused
         /// multiply-add, or a `float` one on a device without `OpFmaKHR`, where Metal's rounds
@@ -2174,10 +2174,10 @@ degradations! {
         /// second), and an `f32` denormal beside a zero or another denormal compared by its value
         /// where the device keeps denormals (Metal compares it as a zero and answers the second).
         NativeMinMax = "native-min-max";
-        /// Class: native device maths. The device's `OpDot` answers Metal's `dot` on `float`, or
-        /// on `half` where its fused multiply-add is not the measured 16-bit one (summed in
-        /// `float`, rounded once to `half`), where Metal's is the fused chain of its products.
-        /// Recorded bound: a `float` `dot` of `n` lanes within `(3n - 1) * 2^-24 * sum |a_i * b_i|` of
+        /// Class: native device maths. The device's `OpDot` answers Metal's `dot` on `float`, or on
+        /// `half` where its fused multiply-add is not the measured 16-bit one (summed in `float`,
+        /// rounded once to `half`), where Metal's is the fused chain of its products. Recorded
+        /// bound: a `float` `dot` of `n` lanes within `(3n - 1) * 2^-24 * sum |a_i * b_i|` of
         /// Metal's chain, plus `n * 2^-126` where a product is an `f32` denormal the device keeps;
         /// a `half` one within `(n + 3) * 2^-11 * sum |a_i * b_i| + (n + 2) * 2^-25`.
         NativeDot = "native-dot";

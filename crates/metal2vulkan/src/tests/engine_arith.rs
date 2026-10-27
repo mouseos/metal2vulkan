@@ -2882,13 +2882,13 @@ fn narrow_float_module_growth_is_bounded() {
 /// `fast` chain's seven multiplies whose one use is the next addition are fused into it: each pair
 /// is the device's `Fma` on the operands held in `float`, its result rounded to `half` with the
 /// denormal arithmetic a product's rounding carries, so the chain keeps the first addition's, the
-/// last multiply's, the conversion's, and the seven pairs' roundings. On a profile whose driver computes a
-/// 16-bit `Fma` as Metal's `half` `fma` (moltenvk-m3) each pair is that `Fma` instead, inline, on
-/// its operands converted to 16 bits and its result widened, all exactly (four `OpFConvert`, the
-/// module's one 16-bit float type), so the chain keeps the other three roundings. On a profile
-/// whose driver's 16-bit `+ - *`, kept apart, is Metal's (moltenvk-m3), each `fadd` and `fmul` that
-/// rounds is that instruction, between two narrowings and a widening (three `OpFConvert`), and
-/// rounds nothing itself: the conversion's rounding alone is left to the module.
+/// last multiply's, the conversion's, and the seven pairs' roundings. On a profile whose driver
+/// computes a 16-bit `Fma` as Metal's `half` `fma` (moltenvk-m3) each pair is that `Fma` instead,
+/// inline, on its operands converted to 16 bits and its result widened, all exactly (four
+/// `OpFConvert`, the module's one 16-bit float type), so the chain keeps the other three roundings.
+/// On a profile whose driver's 16-bit `+ - *`, kept apart, is Metal's (moltenvk-m3), each `fadd`
+/// and `fmul` that rounds is that instruction, between two narrowings and a widening (three
+/// `OpFConvert`), and rounds nothing itself: the conversion's rounding alone is left to the module.
 #[test]
 fn half_rounding_follows_the_operation() {
     let chain = |fast: bool| -> String {
@@ -3448,8 +3448,8 @@ fn fused_multiply_adds_keep_no_zero_signs() {
 /// A float to integer `air.convert` converts NaN to 0, telling it by `OpIsNan` only where the entry
 /// declares `SignedZeroInfNanPreserve` for `float`, and by its bits where it does not (a device may
 /// assume there that no operand is a NaN, in `OpIsNan` and `NClamp` alike): a `fast` entry has no
-/// `OpIsNan`. The NaN is a sum's. (AIR has no `double` conversion; `math::convert`'s unit tests read
-/// a 64-bit container's NaN by its two words.)
+/// `OpIsNan`. The NaN is a sum's. (AIR has no `double` conversion; `math::convert`'s unit tests
+/// read a 64-bit container's NaN by its two words.)
 #[test]
 fn a_convert_tells_a_nan_by_its_bits_where_the_entry_may_assume_none() {
     let float = |name: &'static str, flags: &str| {

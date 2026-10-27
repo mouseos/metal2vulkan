@@ -34,13 +34,13 @@
 //!   `GraphicsCubeGradientRoute`. Elsewhere the sample is a near-equivalent
 //!   (`CubeGradientFootprint`) or refused; the test prints which.
 //! - **The `half` fused multiply-add** (`MetalHalfFma`): the committed cases of a probe
-//!   (`fmx_fma_precise`, `fmx_fma_fast`), whose half word is a `half` `fma` and a `half` `a * b +
-//!   c` that Metal fuses, over 300 triples whose `float` sum lands on a `half` midpoint, 200 where
-//!   one rounding and two differ, the special values and random ones. Where the profile takes the
-//!   deviation, the kernels take the device's 16-bit `Fma` and require `VkProperty::MetalHalfFma`,
-//!   and every half word is the Metal row's of the same chip. Elsewhere the device's `Fma` answers
-//!   (`NativeFma`, or `OpFmaKHR` on 16 bits under the float controls); the test prints how many half
-//!   words match.
+//!   (`fmx_fma_precise`, `fmx_fma_fast`), whose half word is a `half` `fma` and a `half`
+//!   `a * b + c` that Metal fuses, over 300 triples whose `float` sum lands on a `half` midpoint,
+//!   200 where one rounding and two differ, the special values and random ones. Where the profile
+//!   takes the deviation, the kernels take the device's 16-bit `Fma` and require
+//!   `VkProperty::MetalHalfFma`, and every half word is the Metal row's of the same chip. Elsewhere
+//!   the device's `Fma` answers (`NativeFma`, or `OpFmaKHR` on 16 bits under the float controls);
+//!   the test prints how many half words match.
 //! - **The `float` denormals** (`MetalFloatDenormals`): the NaN model's denormal probes, with and
 //!   without fast math. Where the profile takes the deviation, the kernels leave `+ - *`, the
 //!   comparisons, `ldexp`, `sqrt` and `rsqrt` to the device and require

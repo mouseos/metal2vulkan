@@ -92,9 +92,9 @@ fn metal_x(c: f32, r: f32, n: u32, wraps: bool) -> f32 {
 }
 
 /// Metal's nearest texel along a finite direction `d` on faces of size `n`, its reciprocal of the
-/// major magnitude the device's ([`device_recip`]): the face `metal_reading` reads, and on each face
-/// axis `floor(X)` of [`metal_x`] (wrapped on the axes `wrap` names), at most `n - 1`, with each
-/// component Metal reads as zero `0`; a direction left zero at face `+x`'s texel `(0, 0)`.
+/// major magnitude the device's ([`device_recip`]): the face `metal_reading` reads, and on each
+/// face axis `floor(X)` of [`metal_x`] (wrapped on the axes `wrap` names), at most `n - 1`, with
+/// each component Metal reads as zero `0`; a direction left zero at face `+x`'s texel `(0, 0)`.
 fn metal_texel(d: [f32; 3], n: u32, wrap: FaceWrap) -> Texel {
     let m = selecting(d);
     let major = metal_axis(m);
@@ -252,9 +252,9 @@ fn the_step_lanes_reach_the_rounding_hazards() {
     assert!(residue > 1000, "{residue} of {} lanes", steps.len());
 }
 
-/// `SNAP_WORDS`, the reciprocal's division, two fused multiply-adds', and the wrap's bound the words
-/// `snapped` adds beside its routines, in a module valid on every committed profile, without a wrap
-/// and wrapping either face axis or both.
+/// `SNAP_WORDS`, the reciprocal's division, two fused multiply-adds', and the wrap's bound the
+/// words `snapped` adds beside its routines, in a module valid on every committed profile, without
+/// a wrap and wrapping either face axis or both.
 #[test]
 fn the_estimate_bounds_the_emitted_words() {
     let profiles = crate::spirv::testing::committed_profiles().expect("profiles");

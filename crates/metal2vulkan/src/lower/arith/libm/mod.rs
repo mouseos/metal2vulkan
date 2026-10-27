@@ -3,14 +3,14 @@
 //! itself: Metal's precise `fmod` ([`fmod`]).
 //!
 //! Vulkan's precision table bounds `Atan`, `Asin`, and `Acos` at 4096 ulp and `Sin` and `Cos` at
-//! `2^-11` absolute, about what Metal's fast-math table allows, while Metal's precise functions
-//! are bounded at 4 to 6 ulp (MSL Table 8.1). Every call takes the device's instruction, or
-//! Metal's composition of the device's instructions where no instruction is the function (`exp10`,
-//! `log10`, `sinpi`, `cospi`, `tanpi`), and records the device's precision where its functions
-//! are not Metal's own (`PrecisionNote::NativeTranscendentals`). Where the device is Metal's own
+//! `2^-11` absolute, about what Metal's fast-math table allows, while Metal's precise functions are
+//! bounded at 4 to 6 ulp (MSL Table 8.1). Every call takes the device's instruction, or Metal's
+//! composition of the device's instructions where no instruction is the function (`exp10`, `log10`,
+//! `sinpi`, `cospi`, `tanpi`), and records the device's precision where its functions are not
+//! Metal's own (`PrecisionNote::NativeTranscendentals`). Where the device is Metal's own
 //! (`FloatFunctions::Metal`: MoltenVK on an Apple GPU), its instruction is Metal's function in the
-//! math mode Metal compiles the module with ([`module_mode`]), so a call in that mode is Metal's own
-//! answer there ([`Fun::device_answers`]), which the notes read.
+//! math mode Metal compiles the module with ([`module_mode`]), so a call in that mode is Metal's
+//! own answer there ([`Fun::device_answers`]), which the notes read.
 //!
 //! Precise `fmod` keeps its routine: the device's form, `OpFRem` (`x - y · trunc(x / y)` at the
 //! device's precision), Vulkan leaves unbounded once the quotient passes `2^24`, where Metal's is

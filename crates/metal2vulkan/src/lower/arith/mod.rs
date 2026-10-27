@@ -1544,8 +1544,8 @@ fn select_in(
             match f.held {
                 Held::Bool if !op.is_float() => S::Bool { op: *op, form: f },
                 Held::Int { .. } if !op.is_float() => S::Int { op: *op, form: f },
-                // LLVM's `frem` on `float` is Metal's (measured on the M3 Max): with every fast-math
-                // flag its `fast::fmod`, as `air.fast_fmod` is lowered; otherwise
+                // LLVM's `frem` on `float` is Metal's (measured on the M3 Max): with every
+                // fast-math flag its `fast::fmod`, as `air.fast_fmod` is lowered; otherwise
                 // `x - y * trunc(x / y)` of its precise quotient, which the device's `OpFRem` is at
                 // the device's precision, below.
                 Held::Float(FloatFmt::F32) if *op == AirBin::FRem && every_flag(*fmf) => {

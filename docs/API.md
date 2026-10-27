@@ -2587,9 +2587,10 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   `mix` by `FMix`, `fast::sqrt` by `Sqrt`, `dot` of vectors of other than two to four lanes, whose
   chunks' products the device sums where Metal flushes each one below `2^-126`, and a conversion
   to or from `double`, where Metal's reading is not measured. The operations that read a denormal
-  on its bits answer Metal on every device: `ldexp`, the minimum and maximum functions, `sign`,
-  `saturate`, `fract`, `copysign`, `fabs` and `atan2`; and so do the functions the device answers
-  as Metal's own. Off MoltenVK the device's multiply and fused multiply-add round a result whose
+  on its bits answer Metal on every device: `ldexp`, `sign`, `fract`, `copysign`, `fabs` and
+  `atan2`; and so do the functions the device answers as Metal's own. Where the minimum and maximum
+  functions and `saturate` are the device's `NMin`, `NMax` and `NClamp`, their pick of a denormal
+  is `NativeMinMax`'s. Off MoltenVK the device's multiply and fused multiply-add round a result whose
   exact value is below `2^-126` up to `2^-126`, which Metal flushes
   (`float-tininess-after-rounding`).
 - `metal2vulkan-degrade-pixel-sampler-scaling` (precision). `PrecisionNote::PixelSamplerScaling`:

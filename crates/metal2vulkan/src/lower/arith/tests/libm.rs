@@ -205,9 +205,9 @@ fn fmod_routine_reads_metals_denormal_operands() {
 }
 
 /// A `half` call of `fmod` takes the `float` routine before its rounding (Metal's `half` functions
-/// are the same in both modes), so it is Metal's `half` `fmod` (MSL Table 8.3: exact) over a grid of
-/// pairs: the remainder of two `half` values is one. The half reading: `fmod(x, ±inf) = x` (where
-/// lavapipe, RADV, and NVIDIA answer a NaN) and `fmod(1.5, -0.75) = 0` (RADV: 0.75). A zero
+/// are the same in both modes), so it is Metal's `half` `fmod` (MSL Table 8.3: exact) over a grid
+/// of pairs: the remainder of two `half` values is one. The half reading: `fmod(x, ±inf) = x`
+/// (where lavapipe, RADV, and NVIDIA answer a NaN) and `fmod(1.5, -0.75) = 0` (RADV: 0.75). A zero
 /// remainder is Metal's `half` one: `+0` for a nonzero dividend, the dividend itself for a zero
 /// one. Part `part` of `of` of the runs of 4,096 pairs.
 fn half_fmod(part: usize, of: usize) {
