@@ -1143,13 +1143,6 @@ pub enum PushField {
     /// (a fetched attachment's blend): one `uvec4` holding the four `f32`s' bits as the encoder
     /// set them (`BindState::blend_color`), which the function rounds to `half`.
     HalfBlendColor,
-    /// The draw's depth bias for a fragment stage that stores Metal's `Depth16Unorm` codes itself
-    /// (`RuntimeFact::Depth16Codes`): one `uvec4` holding the bits of three `f32`s and a zero
-    /// word, `[constant, slope, clamp, 0]` (`BindState::depth_bias`). The constant is Metal's
-    /// units of 1/65535 as a depth (`metal::state::depth16_bias`), the slope and clamp factors
-    /// Metal's; all three are 0 for a draw its bias does not touch (points, lines, a bias the
-    /// draw's viewports take).
-    DepthBias,
     /// The render encoder's alpha test reference (`setAlphaTestReferenceValue:`) for a fragment
     /// function compiled under `LoweringInputs::alpha_test`: one `u32`, the reference's 8-bit
     /// unorm code as Metal's alpha test compares it (`bind::alpha_test_code` of

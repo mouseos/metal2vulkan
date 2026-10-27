@@ -146,7 +146,6 @@
 //! the function), and the interface variables and execution modes ([`declare`]).
 
 pub(crate) mod color_write;
-pub(crate) mod depth16;
 pub(crate) mod extended_color;
 pub mod fetch;
 mod plan;
@@ -429,10 +428,6 @@ pub struct StageIoPlan {
     /// A fragment function's depth output, which each return gives Metal's answer
     /// (`clamp_depth`).
     pub depth_clamp: Option<DepthClamp>,
-    /// A fragment function that returns no depth, compiled under
-    /// `LoweringInputs::depth16_codes`: the `FragDepth` output and `FragCoord` input objects its
-    /// entry stores the depth Metal stores for the fragment through ([`depth16`]).
-    pub depth16: Option<Depth16Store>,
     /// The render pipeline's private masks a fragment function applies itself
     /// (`LoweringInputs::sample_mask`), which each return ANDs into the function's own
     /// `[[sample_mask]]` output or stores as it.
@@ -650,21 +645,6 @@ pub struct DepthClamp {
     pub object: usize,
     pub clamps: bool,
     pub range: bool,
-    /// Under `LoweringInputs::depth16_codes`, each return clamps the depth to `[0, 1]` and writes
-    /// it as Metal's `Depth16Unorm` code ([`depth16::code_depth`]).
-    pub codes: bool,
-}
-
-/// How a fragment function that returns no depth stores the depth Metal stores for the fragment
-/// under `LoweringInputs::depth16_codes` ([`depth16`]): at entry, its `FragDepth` output object
-/// (`depth`) takes [`depth16::biased_depth`] of its `FragCoord` input object's (`coord`) depth and
-/// `PushField::DepthBias`, bounded by that depth on the bias's side where it is known (`raises`,
-/// `LoweringInputs::depth16_bias_raises`, [`depth16::side_bounded`]).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct Depth16Store {
-    pub depth: usize,
-    pub coord: usize,
-    pub raises: Option<bool>,
 }
 
 /// How a vertex function compiled under `LoweringInputs::viewport_compensation` stores its
@@ -1229,22 +1209,6 @@ pub fn emit_entry(cx: &mut EmitCx<'_>, fb: &mut FunctionBuilder<'_>) -> BResult<
         let x = fetch::emit(cx, fb, &read)?;
         cx.hold(v, x);
     }
-    // The depth Metal stores for the fragment, in the first block, where the whole quad runs for
-    // the derivatives and the store dominates every return.
-    if let Some(d) = cx.plan.families.stage_io.depth16 {
-        let coord = global(cx, d.coord)?;
-        let coord = fb.module().global_value(coord)?;
-        let coord = fb.load(coord, MemAccess::default())?;
-        let z = fb.composite_extract(coord, &[2])?;
-        let bias = cx.push_field(fb, PushField::DepthBias)?;
-        let mut stored = depth16::biased_depth(fb, z, bias)?;
-        if let Some(raises) = d.raises {
-            stored = depth16::side_bounded(fb, stored, z, raises)?;
-        }
-        let out = global(cx, d.depth)?;
-        let out = fb.module().global_value(out)?;
-        fb.store(out, stored, MemAccess::default())?;
-    }
     Ok(())
 }
 
@@ -1705,12 +1669,7 @@ pub fn emit_return(
                             true => Some(cx.push_field(fb, PushField::DepthClampRange)?),
                             false => None,
                         };
-                        let clamped =
-                            clamp_depth(fb, part, kill, d.clamps || d.range || d.codes, range)?;
-                        match d.codes {
-                            true => depth16::code_depth(fb, clamped)?,
-                            false => clamped,
-                        }
+                        clamp_depth(fb, part, kill, d.clamps || d.range, range)?
                     }
                     None => part,
                 };

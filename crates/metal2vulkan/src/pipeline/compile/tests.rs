@@ -758,8 +758,6 @@ fn the_inputs_encoding_is_the_earlier_derived_debug() {
                 .replace(", anisotropic_samplers: {}", "")
                 .replace(", uniform_varyings: {}", "")
                 .replace(", instanced_attributes: {}", "")
-                .replace(", depth16_codes: false", "")
-                .replace(", depth16_bias_raises: None", "")
                 .replace(", color_group: None", "")
                 .replace(", object_payload: None", "")
                 .replace(", tessellation: None", ""),

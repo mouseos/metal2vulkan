@@ -888,7 +888,6 @@ codec_enum! {
         TextureIntegerChannels(f0),
         Specialized(f0),
         HalfBlendColor,
-        DepthBias,
         SnapshotPhase,
         VerticesPerPrimitive,
         TessellationChunk,
@@ -1270,10 +1269,6 @@ codec_enum! {
         StorageTextureIntegerChannels { slot },
         HeapHalfTexelWrites { stage, packed },
         MovableStorageWrites { early_variant },
-        Depth16Codes { biased },
-        Depth16Pass { depth16 },
-        Depth16Biased,
-        Depth16BiasSide { raises },
         SynthesizedGeometry { weights, layer, viewport },
         ObjectThreadgroupArena { static_bytes, payload },
         ExactFormsOverCompilerLimit {

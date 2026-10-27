@@ -788,36 +788,6 @@ pub struct LoweringInputs {
     /// projection). Empty for any other function.
     #[cfg_attr(feature = "serde", serde(default))]
     pub instanced_attributes: BTreeSet<u32>,
-    /// The fragment function stores Metal's `Depth16Unorm` codes itself
-    /// (`lower::stage_io::depth16`): the depth its draws render against is `Depth16Unorm` (its
-    /// pipeline's depth attachment, or the pass's, `VariantKey::depth16_pass`) and its pipeline
-    /// rasterizes one sample, on a profile without `DriverDeviation::MetalDepth16Stores`, or,
-    /// under `VariantKey::depth16_biased` (a draw that biases the depth), without
-    /// `DriverDeviation::MetalDepth16BiasedStores`, so the device's own conversion of a depth may
-    /// store another code near a code's midpoint. Each
-    /// depth it writes is the `float` nearest Metal's code over 65535, which every conversion that
-    /// rounds to nearest stores as that code: the depth it returns, clamped as Metal stores it
-    /// (no `DepthGreater` or `DepthLess` mode, which the rounding can break), and, for a function
-    /// that returns none, the depth Metal stores for the fragment under the draw's depth bias
-    /// (`PushField::DepthBias`, `RuntimeFact::Depth16Codes`), whose hardware bias the consumer
-    /// records as zero. A function that declares or takes early fragment tests, or runs its
-    /// draw's tests itself (`shader_tests`), compiles as without it: the device's tests take its
-    /// depth before it runs; so does one that returns no depth and reads its position's depth,
-    /// which the draw's bias may reach on Metal (unmeasured). `Device::compile_render_pipeline`
-    /// sets it for a `Function` fragment stage from the descriptor, the variant and the profile;
-    /// any other function compiles as without it.
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub depth16_codes: bool,
-    /// Under `depth16_codes`, the side of the draw's bias where the runtime proved it
-    /// (`VariantKey::depth16_bias_raises`): `Some(true)` where Metal's biased depth is never below
-    /// the fragment's own, `Some(false)` where it is never above. A function that stores the
-    /// depth at entry declares it (`DepthGreater`, `DepthLess`) and bounds the depth it writes by
-    /// `FragCoord.z` on that side, so the device may test the depth before the stage runs where its
-    /// test compares that way (`lower::stage_io::depth16::side_bounded`, whose docs prove the bound
-    /// changes no code). `None` elsewhere, and for a function that returns its depth or stores
-    /// none at entry.
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub depth16_bias_raises: Option<bool>,
     /// The group of its render pipeline's color attachments a fragment function writes
     /// ([`ColorGroup`]), where the pipeline has more color attachments than the device draws to at
     /// once, or one at an index at or past that count: the function writes the group's colors at

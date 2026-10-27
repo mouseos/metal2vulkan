@@ -602,7 +602,7 @@ impl Device {
             check_call_stack(c.artifact(), 1)?;
         }
         let artifacts: Vec<&FunctionArtifact> = compiled.iter().map(|c| c.artifact()).collect();
-        let mut linked = link(&artifacts, &LinkInputs::mesh(d), p)?;
+        let linked = link(&artifacts, &LinkInputs::mesh(d), p)?;
         let mut stages = Vec::with_capacity(compiled.len());
         for (i, c) in compiled.iter().enumerate() {
             stages.push(stage_module(c, &linked, i)?);
@@ -642,10 +642,6 @@ impl Device {
         }
         let mut dependencies = dependencies(&artifacts, self);
         dependencies.extend(mesh_facts);
-        let depth = (&mut linked, &mut stages, &mut dependencies);
-        if let Some(r) = depth16_stage((d.into(), v, d.fragment.is_none()), depth, p, m)? {
-            requirements = p.union_requirements(&requirements, &r);
-        }
         let (graphics, requirements) = graphics_requirements(requirements, &linked, &artifacts, p)?;
         let profile = self.profile_fingerprint();
         Ok(RenderPipeline {
@@ -903,7 +899,7 @@ impl Device {
         }
         let compiled: Vec<&CompiledFunction> = std::iter::once(&vertex).chain(&fragment).collect();
         let artifacts: Vec<&FunctionArtifact> = compiled.iter().map(|c| c.artifact()).collect();
-        let mut linked = link(
+        let linked = link(
             &artifacts,
             &LinkInputs::render_variant(d, v, group.clone()),
             p,
@@ -956,10 +952,6 @@ impl Device {
                 fact,
                 mechanism: mechanism(&fact, self.profile()),
             });
-        }
-        let depth = (&mut linked, &mut stages, &mut dependencies);
-        if let Some(r) = depth16_stage((pass(), v, d.fragment.is_none()), depth, p, m)? {
-            requirements = p.union_requirements(&requirements, &r);
         }
         let (mut graphics, requirements) =
             graphics_requirements(requirements, &linked, &artifacts, p)?;
@@ -1070,83 +1062,6 @@ impl Device {
             metal_max_total_threads_per_threadgroup: metal,
         }
     }
-}
-
-/// State among a render pipeline's `dependencies` the depth variant `v` compiled it for
-/// (`RuntimeFact::Depth16Pass` of `VariantKey::depth16_pass`, `RuntimeFact::Depth16Biased` of
-/// `VariantKey::depth16_biased`, `RuntimeFact::Depth16BiasSide` of
-/// `VariantKey::depth16_bias_raises`), and give one without a fragment
-/// function (`fragmentless`) whose pass `pass` takes Metal's `Depth16Unorm` codes from its fragment
-/// stage (`compile::depth16_codes`) the synthesized fragment stage
-/// (`lower::stage_io::depth16::fragment_module`), as a fragment function would take them under
-/// `LoweringInputs::depth16_codes`: its module after the `stages`, its push range and placement in
-/// the `linked` layout and interface, and `RuntimeFact::Depth16Codes` among the `dependencies`.
-/// It writes no color, so the pipeline's color state stays a fragment-less pipeline's. The module's
-/// requirements, or `None` where the pipeline takes no such stage.
-fn depth16_stage(
-    (pass, v, fragmentless): (FragmentPass<'_>, &VariantKey, bool),
-    (linked, stages, dependencies): (
-        &mut Linked,
-        &mut Vec<StageModule>,
-        &mut Vec<RuntimeDependency>,
-    ),
-    p: &DeviceProfile,
-    m: &mut Meter,
-) -> Result<Option<Requirements>, Error> {
-    use crate::lower::stage_io::depth16;
-    if let Some(depth16) = v.depth16_pass {
-        let fact = RuntimeFact::Depth16Pass { depth16 };
-        dependencies.push(RuntimeDependency::new(fact, mechanism(&fact, p)));
-    }
-    if v.depth16_biased {
-        let fact = RuntimeFact::Depth16Biased;
-        dependencies.push(RuntimeDependency::new(fact, mechanism(&fact, p)));
-    }
-    if let Some(raises) = v.depth16_bias_raises {
-        let fact = RuntimeFact::Depth16BiasSide { raises };
-        dependencies.push(RuntimeDependency::new(fact, mechanism(&fact, p)));
-    }
-    if !fragmentless || !crate::pipeline::compile::depth16_codes(pass, v, p) {
-        return Ok(None);
-    }
-    let module = depth16::fragment_module(v.depth16_bias_raises)?;
-    let stats = crate::spirv::verify::verify(&module, p, m)?;
-    let module = crate::spirv::serialize::serialize_for(module, p)?;
-    let words = crate::spirv::serialize::relocate(&module, &*linked)?;
-    stages.push(StageModule {
-        stage: vk::ShaderStage::FRAGMENT,
-        entry_point: ENTRY_NAME.to_owned(),
-        spirv: words.into(),
-        specialization: crate::pipeline::artifact::SpecializationLayout::default(),
-        required_subgroup_size: None,
-        stage_flags: vk::PipelineShaderStageCreateFlags::empty(),
-        reconvergence: crate::pipeline::artifact::Reconvergence::Guaranteed,
-        precision_notes: Vec::new(),
-        strategies: crate::pipeline::artifact::StrategyCensus::default(),
-        constant_blob: None,
-        rounded_colors: Vec::new(),
-        specialized_notes: Vec::new(),
-        half_bit_colors: Vec::new(),
-        own_pixel_textures: Vec::new(),
-        snapshot_textures: Vec::new(),
-        private_bytes: 0,
-        stats,
-    });
-    let placement = depth16::fragment_placement();
-    if let Some((offset, size)) = placement.push_range {
-        linked
-            .layout
-            .push_constants
-            .push(crate::pipeline::layout::PushConstantRange {
-                stages: vk::ShaderStageFlags::FRAGMENT,
-                offset,
-                size,
-            });
-    }
-    linked.interface.push.push(placement);
-    let fact = RuntimeFact::Depth16Codes { biased: true };
-    dependencies.push(RuntimeDependency::new(fact, mechanism(&fact, p)));
-    Ok(Some(module.requirements))
 }
 
 /// A render or mesh render pipeline's graphics state, and its stages' `requirements` with what
@@ -1513,24 +1428,12 @@ fn compute_fields(d: &ComputePipelineDescriptor) -> String {
     }
 }
 
-/// The pipeline key's fields of variant `v` past its stages' keys: the depth it was compiled for
-/// (`VariantKey::depth16_pass`, `VariantKey::depth16_biased`, `VariantKey::depth16_bias_raises`),
-/// which a pipeline without a fragment function keeps in no stage's key, and which every pipeline
-/// states (`RuntimeFact::Depth16Pass`, `RuntimeFact::Depth16Biased`,
-/// `RuntimeFact::Depth16BiasSide`), and its color group past the first (`VariantKey::color_group`),
-/// whose variant of a pipeline without a fragment function has no stage of its own. Empty for
-/// every other variant, so a pipeline keeps its key.
+/// The pipeline key's fields of variant `v` past its stages' keys: its color group past the first
+/// (`VariantKey::color_group`), whose variant of a pipeline without a fragment function has no
+/// stage of its own, and its emulated mesh function's synthesized vertex stage. Empty for every
+/// other variant, so a pipeline keeps its key.
 fn variant_fields(v: &VariantKey) -> String {
-    let mut fields = match v.depth16_pass {
-        Some(depth16) => format!(" depth16_pass {depth16}"),
-        None => String::new(),
-    };
-    if v.depth16_biased {
-        fields.push_str(" depth16_biased");
-    }
-    if let Some(raises) = v.depth16_bias_raises {
-        fields.push_str(&format!(" depth16_bias_raises {raises}"));
-    }
+    let mut fields = String::new();
     // The group a pipeline without a fragment function keeps in no stage's key.
     if v.color_group != 0 {
         fields.push_str(&format!(" color_group {}", v.color_group));

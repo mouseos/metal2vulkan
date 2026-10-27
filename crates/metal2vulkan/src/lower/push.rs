@@ -99,7 +99,6 @@ pub const fn shape(f: PushField) -> FieldShape {
         // The blend color as the encoder set it, four `f32`s' bits.
         PushField::HalfBlendColor => FieldShape::UVec4Array(1),
         // A draw's depth bias: its constant, slope and clamp as `f32`s' bits, and a zero word.
-        PushField::DepthBias => FieldShape::UVec4Array(1),
         // Base vertex, base instance.
         PushField::BaseVertexInstance => FieldShape::UVec2,
         // The draw's vertices per primitive.

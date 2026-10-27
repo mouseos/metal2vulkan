@@ -219,7 +219,7 @@ fn round_mersenne_product(
 /// in `1..=16`, a value the shader may compute): `a` times `scale - 1`, rounded to nearest from
 /// the exact product, ties to even, by the same instructions, so each lane is exact as the
 /// constant scale's is (the split's steps do not depend on `k`'s being constant).
-pub(crate) fn round_scaled_product(
+fn round_scaled_product(
     fb: &mut FunctionBuilder<'_>,
     s: Form,
     a: Value,

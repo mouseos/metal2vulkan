@@ -4103,7 +4103,6 @@ mod blend32;
 mod blend8;
 mod blend_packed;
 mod color_write;
-mod depth16;
 mod divide;
 mod fast;
 mod float_texel;

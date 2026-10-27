@@ -973,8 +973,6 @@ surface! {
         struct DepthBias N;
         enum DepthBiasUnit N;
         fn depth_bias;
-        fn depth16_bias;
-        fn depth16_bias_side;
     }
     "metal::vertex" => metal2vulkan::metal::vertex {
         fn vk_vertex_format;
