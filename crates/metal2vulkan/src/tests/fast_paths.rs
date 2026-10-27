@@ -13,7 +13,6 @@ use crate::device::{
     MultisampleDepthTwinPolicy,
     NanMinMaxPolicy,
     RenderLoweringPolicy,
-    ResolvePolicy,
     RoundingOrderPolicy,
     SamplingPolicy,
     TexelConversionPolicy,
@@ -79,15 +78,13 @@ fn choices() -> Vec<Choice> {
         rounding_order: _,
         // The runtime's: where a multisampled `Depth32Float` texture's texels are held, the
         // texels of a carried texture's decoded twin, a heap's compressed
-        // texture's image, when the host sees a command buffer complete, a multisampled color
-        // attachment's resolve, how a batch begins after the
+        // texture's image, when the host sees a command buffer complete, how a batch begins after the
         // earlier ones of its queue, where a render encoder's calls are lowered, and what holds a
         // sampled texture over host pages.
         multisample_depth_twin: _,
         decoded_texels: _,
         heap_compression: _,
         completion: _,
-        resolve: _,
         batch_order: _,
         render_lowering: _,
         host_page_textures: _,
@@ -105,7 +102,6 @@ fn choices() -> Vec<Choice> {
         choice!(p.decoded_texels: DecodedTexelsPolicy { Compact, Exact }),
         choice!(p.heap_compression: HeapCompressionPolicy { Compressed, Uncompressed }),
         choice!(p.completion: CompletionPolicy { Grouped, Exact }),
-        choice!(p.resolve: ResolvePolicy { Device, Exact }),
         choice!(p.batch_order: BatchOrderPolicy { Ends, Exact }),
         choice!(p.render_lowering: RenderLoweringPolicy { AtCall, Worker }),
         choice!(p.host_page_textures: HostPageTexturePolicy { InPlace, Shadow }),
@@ -439,24 +435,6 @@ fn the_runtime_s_completion_choice_keys_no_profile() {
     for ((stem, g), (other, e)) in grouped.iter().zip(&exact) {
         assert_eq!(stem, other);
         assert_eq!(g.fingerprint(), e.fingerprint(), "{stem}");
-    }
-}
-
-/// The runtime's choice of a multisampled color attachment's resolve (`resolve`) moves no
-/// committed profile's fingerprint: no profile carries it, so no translation follows it.
-#[test]
-fn the_runtime_s_resolve_choice_keys_no_profile() {
-    use crate::spirv::testing::committed_profiles_with;
-    let device = committed_profiles_with(DevicePolicy::UNTRUSTED).expect("profiles");
-    let exact = committed_profiles_with(DevicePolicy {
-        resolve: ResolvePolicy::Exact,
-        ..DevicePolicy::UNTRUSTED
-    })
-    .expect("profiles");
-    assert_eq!(device.len(), exact.len());
-    for ((stem, d), (other, e)) in device.iter().zip(&exact) {
-        assert_eq!(stem, other);
-        assert_eq!(d.fingerprint(), e.fingerprint(), "{stem}");
     }
 }
 

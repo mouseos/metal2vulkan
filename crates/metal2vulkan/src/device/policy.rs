@@ -4,13 +4,12 @@
 use crate::device::profile::{GuestIsolation, HandleDomain, PointerDomain};
 
 /// Policy inputs of `Device::new`. Every field but `decoded_texels`, `heap_compression`,
-/// `completion`, `resolve`, `batch_order`, `render_lowering` and `host_page_textures` can change
-/// emitted code, so the profile carries it (containment as the encoding it selects) and its
-/// fingerprint covers it; those seven are the runtime's alone (the texels of a carried texture's
-/// decoded twin, a heap's compressed texture's image, when the host sees a command buffer
-/// complete, how a multisampled color attachment resolves, how a batch begins after the earlier
-/// ones of its queue, where a render encoder's calls are lowered, and what holds a sampled texture
-/// over host pages), and no profile carries them.
+/// `completion`, `batch_order`, `render_lowering` and `host_page_textures` can change emitted
+/// code, so the profile carries it (containment as the encoding it selects) and its fingerprint
+/// covers it; those six are the runtime's alone (the texels of a carried texture's decoded twin, a
+/// heap's compressed texture's image, when the host sees a command buffer complete, how a batch
+/// begins after the earlier ones of its queue, where a render encoder's calls are lowered, and
+/// what holds a sampled texture over host pages), and no profile carries them.
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -75,11 +74,6 @@ pub struct DevicePolicy {
     /// submission of its own, seen complete at its own end. The runtime's choice alone: no
     /// emitted code changes.
     pub completion: CompletionPolicy,
-    /// Whether a multisampled color attachment whose format has Metal's resolve rule resolves by
-    /// the device's own `AVERAGE` in the pass (the default), or by Metal's rule in one more render
-    /// pass instance after it, on a device whose average is not measured to be Metal's. The
-    /// runtime's choice alone: no emitted code changes.
-    pub resolve: ResolvePolicy,
     /// Whether a batch of command buffers on one `VkQueue` begins after the batches before it
     /// there by their ends (the default, on a driver measured to run no two kernel submissions of
     /// one queue side by side), or by a barrier for each access that depends on theirs. The
@@ -106,8 +100,7 @@ impl DevicePolicy {
     /// multisampled `Depth32Float` texture's texels in a
     /// depth image, compact codes in a carried texture's decoded twin, the driver's compressed image of a
     /// heap's texture Metal keeps compressed, command buffers ready together in one kernel
-    /// submission, the device's resolve of a multisampled color attachment, batches of one
-    /// queue ordered by their ends where the driver runs them one after another, and a sampled
+    /// submission, batches of one queue ordered by their ends where the driver runs them one after another, and a sampled
     /// texture over host pages in place where the device's check passed.
     pub const UNTRUSTED: DevicePolicy = DevicePolicy {
         pointer_domain: PointerDomain::ResidentTable,
@@ -126,7 +119,6 @@ impl DevicePolicy {
         decoded_texels: DecodedTexelsPolicy::Compact,
         heap_compression: HeapCompressionPolicy::Compressed,
         completion: CompletionPolicy::Grouped,
-        resolve: ResolvePolicy::Device,
         batch_order: BatchOrderPolicy::Ends,
         render_lowering: RenderLoweringPolicy::AtCall,
         host_page_textures: HostPageTexturePolicy::InPlace,
@@ -142,8 +134,8 @@ impl DevicePolicy {
     /// ([`YCbCrFilterPolicy::Exact`]), its decode of a carried texture's texels
     /// ([`DecodedTexelsPolicy::Exact`]), a heap's texture whose bytes alias the heap's
     /// as written ([`HeapCompressionPolicy::Uncompressed`]), each command buffer seen complete
-    /// at its own end ([`CompletionPolicy::Exact`]), its multisample color resolve
-    /// ([`ResolvePolicy::Exact`]), each batch ordered after the earlier ones of its queue by
+    /// at its own end ([`CompletionPolicy::Exact`]), each batch ordered after the earlier ones of
+    /// its queue by
     /// the accesses it depends on alone ([`BatchOrderPolicy::Exact`]), each render encoder
     /// call lowered inside the call, which returns every refusal
     /// ([`RenderLoweringPolicy::AtCall`]), and every texture over host pages a shadow, whose
@@ -161,7 +153,6 @@ impl DevicePolicy {
             decoded_texels: DecodedTexelsPolicy::Exact,
             heap_compression: HeapCompressionPolicy::Uncompressed,
             completion: CompletionPolicy::Exact,
-            resolve: ResolvePolicy::Exact,
             batch_order: BatchOrderPolicy::Exact,
             render_lowering: RenderLoweringPolicy::AtCall,
             host_page_textures: HostPageTexturePolicy::Shadow,
@@ -524,36 +515,6 @@ pub enum CompletionPolicy {
     /// Each batch in a submission of its own that signals its own values, so each command buffer
     /// is seen complete, and its event signals land, at its own end, as Metal's are; each batch's
     /// submission checks run once the batch before it was submitted.
-    Exact,
-}
-
-/// How a multisampled color attachment resolves into its resolve texture where its format has
-/// Metal's resolve rule at its sample count (`bind::ColorResolveFormat`: unorm, snorm, sRGB,
-/// 32-bit float and packed 16-bit unorm formats at every count, 16-bit float, `RG11B10Float` and
-/// `RGB9E5Float` ones at 2 and 4 samples), on a device whose own `AVERAGE` resolve is not measured
-/// to write Metal's (`DriverFact::ColorResolveAverageIsMetals`, which only MoltenVK on Apple's GPUs
-/// holds: there the device's resolve is Metal's under either value, and nothing is announced).
-/// Metal's resolve rounds each average by its format's rule; Vulkan's `AVERAGE` leaves the
-/// rounding, an sRGB average's space and what a NaN or infinite sample makes of it to the device.
-/// An attachment whose samples a fetching pass holds in its sample planes as it ends resolves from
-/// them by Metal's rule under either value, which costs less than merging them back for the
-/// device's resolve. The runtime's choice alone: no emitted code changes.
-#[non_exhaustive]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum ResolvePolicy {
-    /// The device's `AVERAGE` resolve in the pass (the default), announced
-    /// `device-rounded-resolve`: a resolved channel can differ from Metal's by one code (an sRGB
-    /// channel by two) where the average lies near a rounding boundary, a float channel in its
-    /// last bits, and wholly where a sample is a NaN or an infinity. Measured at 2 and 4 samples
-    /// on RADV, ANV, NVIDIA and lavapipe; each rounds an 8-bit unorm tie down (RADV: 32512 of
-    /// `R8Unorm`'s 65536 pairs of samples one code below Metal's at 2 samples).
-    #[default]
-    Device,
-    /// Metal's rule, drawn after the pass: one more render pass instance per resolved attachment,
-    /// between barriers, reads its samples (as an input attachment, or from a copy of them where
-    /// its image takes no input attachment usage) and writes the resolve texture, announced
-    /// `shader-resolve` (a performance note).
     Exact,
 }
 

@@ -236,7 +236,6 @@ surface! {
         enum DecodedTexelsPolicy N;
         enum HeapCompressionPolicy N;
         enum CompletionPolicy N;
-        enum ResolvePolicy N;
         enum BatchOrderPolicy N;
         enum RenderLoweringPolicy N;
         enum HostPageTexturePolicy N;

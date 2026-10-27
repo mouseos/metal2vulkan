@@ -436,11 +436,11 @@ pub(super) fn stand_in_as(
     if stored {
         usage |= ImageUsageFlags::STORAGE;
     }
-    // The exact color resolve reads a multisampled color attachment as an input attachment
-    // (`color_resolve.rs`), as does the resolve into the attachment's format's sRGB twin, whose
-    // encoding no device's average writes (`color_resolve::twin_resolved`).
+    // The crate-owned color resolve reads a multisampled extended-range color attachment as an
+    // input attachment (`color_resolve.rs`), as does the resolve into the attachment's format's
+    // sRGB twin, whose encoding no device's average writes (`color_resolve::twin_resolved`).
     let resolved = multisampled
-        && (color_resolve::shader_rules(device, pixel_format, format, target.samples).is_some()
+        && (color_resolve::shader_rules(pixel_format, target.samples).is_some()
             || color_resolve::twin_resolved(pixel_format, target.samples));
     if color && (framebuffer_fetch::through_inputs(profile) || resolved) {
         usage |= ImageUsageFlags::INPUT_ATTACHMENT;

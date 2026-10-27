@@ -94,8 +94,9 @@
 //!   Metal's 1 or 0 for `Boolean` ones.
 //! - **Resolves** (`resolve.rs`) happen at the end of the pass's subpass; a late store action
 //!   must resolve exactly where the attachment has a resolve texture (measured). A color resolve
-//!   whose device's average is not Metal's is drawn after the pass instead, by the exact resolve
-//!   (`color_resolve.rs`). A resolve into
+//!   no device's average writes (an extended-range attachment's, one into its format's sRGB
+//!   twin) is drawn after the pass instead, by the crate-owned resolve (`color_resolve.rs`). A
+//!   resolve into
 //!   a texture whose image is no attachment goes through a scratch image, copied after the pass.
 //!   The encoder may replace an attachment's resolve target until the pass ends
 //!   (`render/late_resolve.rs`).

@@ -9,11 +9,12 @@
 //! the depth from the vertex and the stencil from the reference.
 //!
 //! A color resolve averages: Vulkan leaves the average's rounding (and an sRGB average's space)
-//! to the device, and Metal rounds a unorm tie up (127.5 to 128). The runtime resolves a unorm,
-//! sRGB or float attachment by Metal's rules (its exact resolve, or a driver measured to resolve
-//! as Metal does), so each such resolve asserts Metal's texels; a half-float one is the device's
-//! average, asserted within one unit of Metal's (one half ulp) and printed as a near-equivalent
-//! where it differs. Depth and stencil resolves pick one sample, which Vulkan states exactly. What
+//! to the device, and Metal rounds a unorm tie up (127.5 to 128). The runtime resolves a color
+//! attachment by the device's average, so each resolve asserts Metal's texels on a driver measured
+//! to resolve as Metal does (`DriverFact::ColorResolveAverageIsMetals`), and elsewhere within the
+//! bound `device-rounded-resolve` states: a unorm channel within one code (an 8-bit one within
+//! two, an sRGB channel's bound), a half within one unit (one half ulp), a 32-bit float's
+//! difference printed and not bounded. A resolve that differs is printed as a near-equivalent. Depth and stencil resolves pick one sample, which Vulkan states exactly. What
 //! Metal's validation stops, the runtime refuses typed, apart from a color attachment's resolve
 //! that names no texture or a texture under a store action that does not resolve, which resolves
 //! nothing and leaves that texture untouched, and a multisampled color attachment's resolve into
@@ -325,9 +326,10 @@ impl Channels {
     }
 }
 
-/// Print the device's resolved texels beside Metal's, and assert them Metal's, or for half
-/// floats (`channels`), whose resolve is the device's average, each channel within one unit; the
-/// differing cases are named in `differ`. A resolve that is not Metal's is printed as a
+/// Print the device's resolved texels beside Metal's, and assert them Metal's on a driver whose
+/// average is measured to be Metal's, else within the bound `device-rounded-resolve` states for
+/// `channels` (the module docs), for half floats each channel within one unit on every driver;
+/// the differing cases are named in `differ`. A resolve that is not Metal's is printed as a
 /// near-equivalent, never as Metal's answer.
 pub(super) fn near(
     lane: &Lane,
@@ -338,6 +340,11 @@ pub(super) fn near(
     differ: &RefCell<Vec<String>>,
 ) {
     let device = lane.device.name();
+    let metals = lane
+        .device
+        .properties()
+        .driver_facts
+        .contains(&DriverFact::ColorResolveAverageIsMetals);
     let exact = resolved == metal;
     eprintln!(
         "resolve {name} on {device}: {} ({})",
@@ -349,9 +356,16 @@ pub(super) fn near(
         }
     );
     let (got, want) = (channels.values(resolved), channels.values(metal));
-    let within = got.len() == want.len() && got.iter().zip(&want).all(|(a, b)| (a - b).abs() <= 1);
-    let averaged = matches!(channels, Channels::Half);
-    if !(exact || (averaged && within)) {
+    let bound = match (channels, metals) {
+        (Channels::Half, _) => Some(1),
+        (_, true) => Some(0),
+        (Channels::Unorm8, false) => Some(2),
+        (Channels::Unorm16, false) => Some(1),
+        (Channels::Float, false) => None,
+    };
+    let within = got.len() == want.len()
+        && bound.is_none_or(|bound| got.iter().zip(&want).all(|(a, b)| (a - b).abs() <= bound));
+    if !(exact || within) {
         differ.borrow_mut().push(format!(
             "{name}: {} where Metal resolved {}",
             hex(resolved),
@@ -360,8 +374,8 @@ pub(super) fn near(
     }
 }
 
-/// Probe 6's per-sample resolves of each color format: Metal's, a half one within one unit of
-/// Metal's (the module docs).
+/// Probe 6's per-sample resolves of each color format: Metal's, or within the device's announced
+/// bound of Metal's (the module docs).
 #[test]
 fn color_resolves_are_metals() {
     let (messages, _cache, lane) = lane();

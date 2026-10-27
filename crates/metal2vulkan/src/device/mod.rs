@@ -73,7 +73,6 @@ pub use policy::{
     MultisampleDepthTwinPolicy,
     NanMinMaxPolicy,
     RenderLoweringPolicy,
-    ResolvePolicy,
     RoundingOrderPolicy,
     SamplingPolicy,
     TexelConversionPolicy,

@@ -235,8 +235,8 @@ use crate::candidate::engine::variants::compile_compute_for_shape;
 use crate::gpu::TEST_DEVICE;
 use metal2vulkan::bind::{AstcDecode, SamplerDescriptor};
 use metal2vulkan::cache::VariantKey;
+use metal2vulkan::device::DecodedTexelsPolicy;
 use metal2vulkan::device::VkExtension;
-use metal2vulkan::device::{DecodedTexelsPolicy, ResolvePolicy};
 use metal2vulkan::device::{DriverFact, DriverWorkaround, OpBits, VkFeature, VkProperty};
 use metal2vulkan::device::{SimdClass, Tier};
 use metal2vulkan::error::{DriverDeviation, Feature};
@@ -291,16 +291,15 @@ const BLITS: [Degradation; 3] = [
 const DISPATCHES: [Degradation; 2] = [Degradation::SplitDispatch, Degradation::EmulatedSimdgroups];
 
 /// The kinds [`passes_degrade_once_per_kind`] takes (the second where the device resolves a
-/// combined format's aspects one at a time; the exact resolve and the device's rounded one where
-/// the driver's average of `RGBA8Unorm` at 4 samples is not measured as Metal's, or where the
-/// device makes a texture of 8 samples; the unmeasured resolve where it makes one).
-const PASSES: [Degradation; 7] = [
+/// combined format's aspects one at a time; the device's rounded resolve where the driver's
+/// average of `RGBA8Unorm` at 4 samples is not measured as Metal's, or where the device makes a
+/// texture of 8 samples; the unmeasured resolve where it makes one).
+const PASSES: [Degradation; 6] = [
     Degradation::SeparateDepthStencil,
     Degradation::OneAspectResolve,
     Degradation::ResolveScratch,
     Degradation::DeviceRoundedResolve,
     Degradation::DontCareStore,
-    Degradation::ShaderResolve,
     Degradation::UnmeasuredResolve,
 ];
 
@@ -1608,7 +1607,8 @@ fn resolves_stencil_alone(device: &Device) -> Option<bool> {
 /// 4x `Depth32Float_Stencil8` target whose stencil alone resolves. Each kind is announced once and
 /// nothing else, the one-aspect resolve exactly where the device's description resolves that
 /// stencil one aspect at a time (lavapipe, which resolves no aspects independently), and
-/// `device-rounded-resolve` exactly where the 8x half-float target, which no rule covers, is made.
+/// `device-rounded-resolve` exactly where the device's average is not measured to be Metal's at 4
+/// samples or an 8x target is made.
 #[test]
 fn passes_degrade_once_per_kind() {
     let (messages, _cache, lane) = lane();
@@ -1624,13 +1624,14 @@ fn passes_degrade_once_per_kind() {
     let eight_samples = lane.device.new_texture(&eight).ok();
     eight.pixel_format = PixelFormat::RGBA16Float;
     let half_eight = lane.device.new_texture(&eight).ok();
-    let exact = !lane
+    let rounded = !lane
         .device
         .properties()
         .driver_facts
         .contains(&DriverFact::ColorResolveAverageIsMetals);
     eprintln!(
-        "8 samples made: {} (RGBA16Float: {}); exact resolve at 4 samples: {exact}",
+        "8 samples made: {} (RGBA16Float: {}); the device's rounded resolve at 4 samples: \
+         {rounded}",
         eight_samples.is_some(),
         half_eight.is_some()
     );
@@ -1656,8 +1657,8 @@ fn passes_degrade_once_per_kind() {
             );
             lane.run(&descriptor, |_, _, _| {}).unwrap();
         }
-        // A half-float resolve at 4 samples, Metal's closed rule (the exact resolve), and at 8
-        // where the device makes such a texture, which no rule covers: the device's average.
+        // A half-float resolve at 4 samples, and at 8 where the device makes such a texture: the
+        // device's average.
         let half = PixelFormat::RGBA16Float;
         let descriptor = color_pass(
             &lane.msaa(half),
@@ -1713,10 +1714,9 @@ fn passes_degrade_once_per_kind() {
             // Where the device's average is Metal's (MoltenVK's is Metal's own resolve) and it
             // makes no texture of 8 samples (an Apple GPU: Metal makes none past 4), every resolve
             // here is Metal's own and none rounds by the device.
-            Degradation::ShaderResolve => exact || eight_samples.is_some(),
-            // Only a format without a rule at its count rounds by the device: the half-float
-            // resolve of 8 samples.
-            Degradation::DeviceRoundedResolve => half_eight.is_some(),
+            Degradation::DeviceRoundedResolve => {
+                rounded || eight_samples.is_some() || half_eight.is_some()
+            }
             Degradation::UnmeasuredResolve => eight_samples.is_some() || half_eight.is_some(),
             _ => true,
         })
@@ -2139,41 +2139,18 @@ pub(super) fn twins_depth(device: &Device) -> bool {
     clamps_depth_uploads(device) || !keeps
 }
 
-/// The kind `device` announces for a resolve of a color attachment of `format` at `samples`, a
-/// texture the runtime made: `shader-resolve` under `ResolvePolicy::Exact` where the format has
-/// Metal's rules at that count (`ColorResolveFormat::of` and `resolves`) and the device's
-/// `AVERAGE` is not measured to be Metal's there (`DriverFact::ColorResolveAverageIsMetals`, at
-/// most 4 samples): the runtime gives such a target the input attachment usage the exact resolve
-/// reads it through where that costs the image nothing, which every driver measured answers so
-/// (lavapipe, RADV, ANV and NVIDIA); `device-rounded-resolve` where the device's
-/// `AVERAGE` resolves it (one with rules under `ResolvePolicy::Device`, the default, and one
-/// without rules there under either) and is not measured to resolve as Metal's; none where it is
-/// (the fact holds for every format).
-pub(super) fn resolve_kind(
-    device: &Device,
-    format: PixelFormat,
-    samples: u32,
-) -> Option<Degradation> {
-    // Rules that hold at that count: the float formats' at 2 and 4 samples only.
-    let rules = metal2vulkan::metal::format::direct_format(format)
-        .and_then(metal2vulkan::bind::ColorResolveFormat::of)
-        .is_some_and(|rules| rules.resolves(samples));
+/// The kind `device` announces for a resolve of a color attachment of a format that is not
+/// extended-range, into a texture of its own format, at `samples`, a texture the runtime made:
+/// the device's `AVERAGE` resolves it in the pass, `device-rounded-resolve` where that is not
+/// measured to resolve as Metal's (`DriverFact::ColorResolveAverageIsMetals`, at most 4 samples);
+/// none where it is (the fact holds for every format).
+pub(super) fn resolve_kind(device: &Device, samples: u32) -> Option<Degradation> {
     let metals = samples <= 4
         && device
             .properties()
             .driver_facts
             .contains(&DriverFact::ColorResolveAverageIsMetals);
-    let policy = device.compile_device().policy().resolve;
-    // A format without rules, or any under the device's resolve, resolves by the device's
-    // average, Metal's own where the fact holds.
-    match (
-        metals,
-        rules && samples > 1 && policy == ResolvePolicy::Exact,
-    ) {
-        (true, _) => None,
-        (false, true) => Some(Degradation::ShaderResolve),
-        (false, false) => Some(Degradation::DeviceRoundedResolve),
-    }
+    (!metals).then_some(Degradation::DeviceRoundedResolve)
 }
 
 /// Whether `device` copies bytes into a multisampled 32-bit float depth (from a buffer, or from a

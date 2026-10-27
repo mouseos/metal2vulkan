@@ -95,18 +95,6 @@ compile does. `DevicePolicy::default()` is `DevicePolicy::UNTRUSTED`:
   [FAST-PATHS.md](FAST-PATHS.md) lists every choice, its bound and the measured cost of its exact
   form. On MoltenVK on an Apple GPU, whose sampler and `float` functions are Metal's own, most of
   these choices change nothing.
-- **The device's resolve of a multisampled color attachment** (`ResolvePolicy::Device`, the
-  runtime's choice; no pipeline differs). A pass resolves a color attachment by the device's
-  `AVERAGE` in the pass, which rounds the average (a tie, an sRGB average) as the device does and
-  answers a NaN or infinite sample as the device does, announced as `device-rounded-resolve`.
-  `resolve = ResolvePolicy::Exact`, which `exact_answers()` selects, resolves an attachment whose
-  format has Metal's rule at its sample count by that rule in one more render pass instance after
-  the pass (`shader-resolve`). On MoltenVK the device's resolve is Metal's own under either value,
-  and an attachment a fetching pass's sample planes hold as it ends resolves from them by Metal's
-  rule under either. An extended-range attachment (`BGR10_XR`, `BGRA10_XR`, their sRGB twins,
-  `RGB10A2Unorm_sRGB`), held in raw codes no device averages, resolves after the pass under either
-  value, on every device: a linear form's colors by Metal's rule, its alpha and an sRGB form's
-  colors by a near-equivalent (`extended-range-resolve`).
 - **Batches of a queue ordered by their ends** (`BatchOrderPolicy::Ends`, the runtime's choice; no
   pipeline differs). On ANV, RADV and NVIDIA's driver, each measured to start no kernel submission
   of a `VkQueue` before the one before it completed, each batch of command buffers ends with a
@@ -1497,8 +1485,9 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   texture whose slices from the resolve slice hold fewer layers than the pass's. Cost: the pass
   resolves into a scratch image, whose render area is copied into the texture after the pass.
 - `metal2vulkan-degrade-shader-resolve` (performance). `ShaderResolve`: A multisample color resolve
-  drawn after the pass by Metal's exact rules, where the device's `AVERAGE` resolve is not measured
-  to be Metal's, under `ResolvePolicy::Exact` or from a fetching pass's sample planes; or a stencil resolved by `DepthResolvedSample` after `Min` or `Max`, which no
+  drawn after the pass by the crate-owned resolve: of an extended-range attachment, whose codes no
+  device's resolve averages, into the attachment's format's sRGB twin, whose encoding no device's
+  resolve writes, or from a fetching pass's sample planes; or a stencil resolved by `DepthResolvedSample` after `Min` or `Max`, which no
   Vulkan resolve mode states, or a `Min` or `Max` depth on a device without the mode, drawn after
   the pass. Cost: one more render pass instance after the pass reads the stored samples (or the
   sample planes) and writes the resolve texture, where the device would resolve in the pass; where
@@ -1661,13 +1650,10 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   and end.
 - `metal2vulkan-degrade-device-rounded-resolve` (precision). `DeviceRoundedResolve`: A multisample
   color resolve averages through Vulkan's `AVERAGE` mode, which leaves the rounding of the average
-  (and the sRGB encoding) to the device, on a device not measured to round as Metal does: under
-  `ResolvePolicy::Device`, the default, any color attachment but one a fetching pass's sample
-  planes hold as it ends (resolved from them by Metal's rule); under `ResolvePolicy::Exact` a format
-  without Metal's closed rule at its count (the 16-bit float, `RG11B10Float` and `RGB9E5Float`
-  formats past 4 samples, and a format no rule covers), or an attachment whose image the exact
-  resolve can neither read nor copy: an image without input attachment usage of a format the
-  device does not copy. Never, whatever the format, on a device whose resolve is measured to round
+  (and the sRGB encoding) to the device, on a device not measured to round as Metal does: any
+  color attachment but an extended-range one, one resolving into its format's sRGB twin, and one a
+  fetching pass's sample planes hold as it ends (each resolved after the pass). Never, whatever the
+  format, on a device whose resolve is measured to round
   as Metal does (`DriverFact::ColorResolveAverageIsMetals`: MoltenVK's resolve is Metal's own).
   Measured against Metal's rules at 2 and 4 samples on RADV (Mesa 26.0.8, the Radeon 780M and the RX
   7900 XTX), ANV (Mesa 26.2.4, the Iris Xe), NVIDIA (615.71, the RTX 5080 Laptop GPU) and lavapipe
@@ -1685,9 +1671,9 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
 - `metal2vulkan-degrade-unmeasured-resolve` (precision). `UnmeasuredResolve`: A multisample color
   resolve of more than 4 samples, of which Apple's GPUs make no texture: no Metal answer is measured
   there; likewise a stencil resolved by `DepthResolvedSample` after `Min` or `Max`, whose pick among
-  equal depths is measured at 2 and 4 samples. Cost: the resolve applies the rules Metal's resolve
-  follows at 2 and 4 samples (or the device's average, for a format without them), which no Metal
-  answer confirms at this count.
+  equal depths is measured at 2 and 4 samples. Cost: the resolve is the device's average, or after
+  the pass the rules Metal's resolve follows at 2 and 4 samples, which no Metal answer confirms at
+  this count.
 - `metal2vulkan-degrade-extended-range-resolve` (precision). `ExtendedRangeResolve`: A multisample
   resolve of an extended-range color attachment whose resolve Metal averages from values finer than
   the codes the attachment holds (`BGRA10_XR`'s alpha, an `_sRGB` twin's color,
