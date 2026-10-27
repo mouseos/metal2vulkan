@@ -15,12 +15,15 @@
 //! filtered alone.
 //!
 //! **The value.** Each tap's texel decodes to its `float` channels by its format's rule: a
-//! normalized code `c / (2^b - 1)` (snorm `max(c / (2^(b-1) - 1), -1)`), an 8-bit sRGB code
-//! through Metal's twelve-bit tables (`lower::arith::srgb`), a float as it is (a half and a packed
-//! float widened exactly, `RGB9E5Float`'s mantissas at their shared exponent), an extended-range
-//! code `(c - 384) / 510` or its sRGB twin's table step. Each channel is the sum of its taps'
-//! weighted values in tap order (x fastest, then y, then z), a tap of weight 0 left out, every
-//! product and sum rounded to `f32` on its own. The sum encodes back by the format's rule: a
+//! normalized code `c` times `1 / (2^b - 1)` (snorm `max(c` times `1 / (2^(b-1) - 1), -1)`), an
+//! 8-bit sRGB code through Metal's twelve-bit tables (`lower::arith::srgb`), a float as it is (a
+//! half and a packed float widened exactly, `RGB9E5Float`'s mantissas at their shared exponent),
+//! an extended-range code `c - 384` times `1 / 510` or its sRGB twin's table step, each
+//! reciprocal an `f32` constant. Each channel is the sum of its taps' weighted values in tap
+//! order (x fastest, then y, then z), a tap of weight 0 left out, every product and sum rounded
+//! to `f32` on its own: operations Vulkan's precision rules have a device round correctly (no
+//! division, whose precision is the device's), so they leave a device that keeps `f32`
+//! subnormals no other bytes than the CPU's. The sum encodes back by the format's rule: a
 //! normalized code rounded to nearest even from the clamped value, a float to nearest even (a NaN
 //! the format's quiet NaN), `RGB9E5Float` by Vulkan's shared-exponent conversion. `layout.rs`
 //! states each rule; [`MipmapFilterChain::expected_levels`] is the same chain on the CPU.
@@ -63,6 +66,7 @@ pub(crate) mod tests;
 use std::sync::Arc;
 
 use crate::budget::{Budget, Meter};
+use crate::device::requirements::Requirements;
 use crate::device::Device;
 use crate::error::{Error, InternalError, InternalKind};
 use crate::metal::PixelFormat;
@@ -77,7 +81,7 @@ pub struct MipmapFilterModule {
     /// SPIR-V 1.5 words, entry point `main`, bindings numbered as below in set 0.
     pub spirv: Arc<[u32]>,
     /// What the module needs from the device.
-    pub requirements: crate::device::requirements::Requirements,
+    pub requirements: Requirements,
 }
 
 impl MipmapFilterModule {

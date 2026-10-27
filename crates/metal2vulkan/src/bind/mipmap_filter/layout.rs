@@ -7,15 +7,16 @@ use crate::metal::PixelFormat;
 /// How one field of a texel converts to and from its `float` value (a padding field has none).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Rule {
-    /// A normalized unsigned code `c` of the field's width `b`: `c / (2^b - 1)`; a value encodes
+    /// A normalized unsigned code `c` of the field's width `b`: `c` times `1 / (2^b - 1)`
+    /// ([`Field::scale`]); a value encodes
     /// as `RoundEven(clamp(v, 0, 1) (2^b - 1))`, a NaN 0.
     Unorm,
-    /// A normalized signed code `c` (two's complement) of the field's width `b`: `max(c /
-    /// (2^(b-1) - 1), -1)`; a value encodes as `RoundEven(clamp(v, -1, 1) (2^(b-1) - 1))`, a NaN
+    /// A normalized signed code `c` (two's complement) of the field's width `b`: `max(c` times
+    /// `1 / (2^(b-1) - 1), -1)`; a value encodes as `RoundEven(clamp(v, -1, 1) (2^(b-1) - 1))`, a NaN
     /// 0.
     Snorm,
     /// An 8-bit sRGB colour code, through Metal's twelve-bit tables (`lower::arith::srgb`): the
-    /// code's step `k` reads `k / 4095`, and a value encodes as the byte whose encode range holds
+    /// code's step `k` reads `k` times `1 / 4095` ([`SRGB_STEP_SCALE`]), and a value encodes as the byte whose encode range holds
     /// `RoundEven(clamp(v, 0, 1) 4095)`, a NaN 0. A texture held as its UNORM twin takes this
     /// rule, as a shader's read of it does.
     Srgb8,
@@ -29,7 +30,8 @@ pub(super) enum Rule {
         mantissa: u32,
         signed: bool,
     },
-    /// An extended-range 10-bit code `c`: `(c - 384) / 510`, an alpha code clamped to `[384,
+    /// An extended-range 10-bit code `c`: `c - 384` times `1 / 510` ([`EXTENDED_SCALE`]), an
+    /// alpha code clamped to `[384,
     /// 894]` first (`[0, 1]`); a value encodes as `RoundEven(v 510) + 384`, `v` clamped to `[-1,
     /// 1.5]` (alpha to `[0, 1]`) and the code to `[0, 1023]`, a NaN 0.
     Extended { alpha: bool },
@@ -41,6 +43,14 @@ pub(super) enum Rule {
     /// Bits written as this constant, which no channel reads (`BGR10_XR`'s top two bits: 3).
     Padding(u32),
 }
+
+/// The `f32` reciprocal of 4095, rounded once: an 8-bit sRGB code's value is its 12-bit decode
+/// step times it (`Rule::Srgb8`).
+pub(super) const SRGB_STEP_SCALE: f32 = 1.0 / 4095.0;
+
+/// The `f32` reciprocal of 510, rounded once: an extended-range code's value is its offset from
+/// 384 times it (`Rule::Extended`).
+pub(super) const EXTENDED_SCALE: f32 = 1.0 / 510.0;
 
 /// One field of a texel: `width` bits at bit `offset` of the texel's little-endian bytes, never
 /// across a 32-bit word.
@@ -68,6 +78,13 @@ impl Field {
             Rule::Snorm => (1 << (self.width - 1)) - 1,
             _ => self.mask(),
         }
+    }
+
+    /// The `f32` reciprocal of [`den`](Self::den), rounded once: a normalized code's value is the
+    /// code times it, a product every device rounds alike, where a quotient's precision is the
+    /// device's.
+    pub(super) fn scale(&self) -> f32 {
+        1.0 / self.den() as f32
     }
 
     /// Whether a channel reads the field (every field but padding).

@@ -7,7 +7,9 @@
 //! format's layout, so that no branch on a format is left to the GPU.
 
 use super::fetch::{self, Component, Recover};
-use super::layout::{header, Field, Layout, Rule, Texel, TAP_WORDS};
+use super::layout::{
+    header, Field, Layout, Rule, Texel, EXTENDED_SCALE, SRGB_STEP_SCALE, TAP_WORDS,
+};
 use super::{DESTINATION, PARAMS, SOURCE, SOURCE_IMAGE};
 use crate::lower::arith::extended_range::table as extended_range;
 use crate::lower::arith::srgb;
@@ -329,14 +331,14 @@ fn value(f: &mut FunctionBuilder<'_>, k: &K<'_>, words: &[Value], fl: &Field) ->
     match fl.rule {
         Rule::Unorm => {
             let v = f.convert(ConvOp::ConvertUToF, b, k.f32_)?;
-            fopk(f, k, BinOp::FDiv, v, fl.den() as f32)
+            fopk(f, k, BinOp::FMul, v, fl.scale())
         }
         Rule::Snorm => {
             let shift = 32 - fl.width;
             let v = bink(f, BinOp::ShiftLeftLogical, b, shift)?;
             let v = bink(f, BinOp::ShiftRightArithmetic, v, shift)?;
             let v = signed_float(f, k, v)?;
-            let v = fopk(f, k, BinOp::FDiv, v, fl.den() as f32)?;
+            let v = fopk(f, k, BinOp::FMul, v, fl.scale())?;
             let minus_one = cf(f, k, -1.0)?;
             f.glsl(GlslOp::FMax, &[v, minus_one])
         }
@@ -344,7 +346,7 @@ fn value(f: &mut FunctionBuilder<'_>, k: &K<'_>, words: &[Value], fl: &Field) ->
             let table = k.srgb.ok_or_else(missing_table)?;
             let step = srgb::step(f, table, b)?;
             let v = f.convert(ConvOp::ConvertUToF, step, k.f32_)?;
-            fopk(f, k, BinOp::FDiv, v, 4095.0)
+            fopk(f, k, BinOp::FMul, v, SRGB_STEP_SCALE)
         }
         Rule::Float { exponent: 8, .. } => f.convert(ConvOp::Bitcast, b, k.f32_),
         Rule::Float {
@@ -360,7 +362,7 @@ fn value(f: &mut FunctionBuilder<'_>, k: &K<'_>, words: &[Value], fl: &Field) ->
             };
             let o = bink(f, BinOp::ISub, c, 384)?;
             let v = signed_float(f, k, o)?;
-            fopk(f, k, BinOp::FDiv, v, 510.0)
+            fopk(f, k, BinOp::FMul, v, EXTENDED_SCALE)
         }
         Rule::ExtendedSrgb => extended_srgb_value(f, k, b),
         Rule::Padding(_) => cf(f, k, 0.0),

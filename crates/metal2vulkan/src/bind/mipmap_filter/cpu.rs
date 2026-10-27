@@ -3,7 +3,7 @@
 //! rounds each operation as IEEE does (the kernel's sums and products are not contracted) writes
 //! these bytes.
 
-use super::layout::{axis_tap, Field, Layout, Rule, Texel};
+use super::layout::{axis_tap, Field, Layout, Rule, Texel, EXTENDED_SCALE, SRGB_STEP_SCALE};
 use crate::lower::arith::srgb::{SRGB_DECODE_STEPS, SRGB_ENCODE_FIRST};
 use crate::metal::format::extended_srgb;
 
@@ -92,20 +92,20 @@ fn extended_offset(i: u32) -> u32 {
 /// The value of field `f`'s code `c` (`layout::Rule`).
 fn value(f: &Field, c: u32) -> f32 {
     match f.rule {
-        Rule::Unorm => c as f32 / f.den() as f32,
+        Rule::Unorm => c as f32 * f.scale(),
         Rule::Snorm => {
             let shift = 32 - f.width;
             let c = ((c << shift) as i32) >> shift;
-            (c as f32 / f.den() as f32).max(-1.0)
+            (c as f32 * f.scale()).max(-1.0)
         }
-        Rule::Srgb8 => f32::from(SRGB_DECODE_STEPS[c as usize]) / 4095.0,
+        Rule::Srgb8 => f32::from(SRGB_DECODE_STEPS[c as usize]) * SRGB_STEP_SCALE,
         Rule::Float { exponent: 8, .. } => f32::from_bits(c),
         Rule::Float {
             mantissa, signed, ..
         } => small_float_value(c, mantissa, signed),
         Rule::Extended { alpha } => {
             let c = if alpha { c.clamp(384, 894) } else { c };
-            (c as i32 - 384) as f32 / 510.0
+            (c as i32 - 384) as f32 * EXTENDED_SCALE
         }
         Rule::ExtendedSrgb => {
             let n = (c as i32 - 384).unsigned_abs();
