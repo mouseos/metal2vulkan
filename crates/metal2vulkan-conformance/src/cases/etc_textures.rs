@@ -39,10 +39,10 @@
 //! **Tolerances.** Two, each the ledger's own number for a fast default, and each one that fails
 //! where the notice it names did not fire.
 //!
-//! Under the default `DecodedTexelsPolicy::Compact` an 11-bit channel is read from a 16-bit
-//! normalized twin, which `docs/FAST-PATHS.md` bounds at half a 16-bit step — **1/131070
-//! unsigned, 1/65534 signed** — and the runtime announces `decoded-texel-precision` where such a
-//! texture is made. Those are the ledger's own numbers, named per format, not a round number.
+//! An 11-bit channel is read from a 16-bit normalized twin, which the runtime announces as
+//! `decoded-texel-precision` where such a texture is made, and whose catalogue entry (docs/API.md)
+//! bounds it at half a 16-bit step — **1/131070 unsigned, 1/65534 signed**. Those are the notice's
+//! own numbers, named per format, not a round number.
 //!
 //! Under the default `TexelConversionPolicy::Device` the `float` a function reads of a twin's
 //! 8-bit code is the **device's** conversion of that code, not Metal's `c / 255` correctly
@@ -96,10 +96,9 @@ const BLOCKS: u32 = SIDE / 4;
 /// texture of its own, so a diff names which blocks moved.
 const ROUNDS: [&str; 2] = ["zero-blocks", "seeded-blocks"];
 
-/// The most a compact unsigned 11-bit texel may be off Metal's value: half a 16-bit step, as
-/// `docs/FAST-PATHS.md` states it for `decoded_texels = DecodedTexelsPolicy::Compact`. It is the
-/// ledger's number, so a run that exceeds it fails rather than being re-fitted to whatever a
-/// device answers.
+/// The most a compact unsigned 11-bit texel may be off Metal's value: half a 16-bit step, as the
+/// `decoded-texel-precision` notice states it (docs/API.md). It is the notice's number, so a run
+/// that exceeds it fails rather than being re-fitted to whatever a device answers.
 const LEDGERS_UNSIGNED_BOUND: f64 = 1.0 / 131_070.0;
 
 /// The same for a signed 11-bit texel, whose twin holds a 16-bit **signed** normalized code, so
@@ -382,13 +381,11 @@ impl Case for EtcTextures {
             }
         }
         // An EAC 11-bit format's compact twin holds the 16-bit normalized code nearest Metal's
-        // value, which the runtime announces as `decoded-texel-precision` and
-        // `docs/FAST-PATHS.md` bounds at half a 16-bit step. The bound here is the ledger's
-        // number for this format's signedness, so a run that exceeds it is the ledger's claim
-        // failing. It is wider than the conversion ulp above and covers it, which is why an
-        // 11-bit format names this one alone. Under `DecodedTexelsPolicy::Exact` the twin holds
-        // Metal's values as `float`s, the notice does not fire, the justification does not hold,
-        // and every texel is compared exactly.
+        // value, which the runtime announces as `decoded-texel-precision`, whose catalogue entry
+        // bounds it at half a 16-bit step. The bound here is the notice's number for this
+        // format's signedness, so a run that exceeds it is the notice's claim failing. It is wider
+        // than the conversion ulp above and covers it, which is why an 11-bit format names this
+        // one alone.
         if let Some(bound) = self.compact_bound() {
             all.push(crate::replay::notice_allowance(
                 Degradation::DecodedTexelPrecision.code(),
@@ -587,8 +584,8 @@ mod tests {
     ///   `TexelConversionPolicy::Device`: one `f32` ulp, both rounds;
     /// - their **sRGB** forms, whose colour the function decodes from the raw code through Metal's
     ///   twelve-bit table itself: **nothing at all**;
-    /// - the four EAC **11-bit** formats, read from a compact 16-bit twin under
-    ///   `DecodedTexelsPolicy::Compact`: half a 16-bit step by the format's signedness.
+    /// - the four EAC **11-bit** formats, read from a compact 16-bit twin: half a 16-bit step by
+    ///   the format's signedness.
     #[test]
     fn each_format_loosens_the_texel_its_ledger_row_names() {
         let mut loosened = Vec::new();

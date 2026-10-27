@@ -228,7 +228,6 @@ surface! {
         enum SamplingPolicy N;
         enum YCbCrFilterPolicy N;
         enum TexelConversionPolicy N;
-        enum DecodedTexelsPolicy N;
         enum HeapCompressionPolicy N;
         enum CompletionPolicy N;
         enum BatchOrderPolicy N;

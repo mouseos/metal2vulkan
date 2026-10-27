@@ -7,9 +7,9 @@
 //! classed, and so reaches the ledger.
 
 use crate::device::{
-    BatchOrderPolicy, CompletionPolicy, DecodedTexelsPolicy, DevicePolicy, HeapCompressionPolicy,
-    HostPageTexturePolicy, RenderLoweringPolicy, SamplingPolicy, TexelConversionPolicy,
-    Unorm8LinearFilterPolicy, YCbCrFilterPolicy,
+    BatchOrderPolicy, CompletionPolicy, DevicePolicy, HeapCompressionPolicy, HostPageTexturePolicy,
+    RenderLoweringPolicy, SamplingPolicy, TexelConversionPolicy, Unorm8LinearFilterPolicy,
+    YCbCrFilterPolicy,
 };
 use crate::pipeline::PrecisionNote;
 use std::collections::BTreeSet;
@@ -63,11 +63,9 @@ fn choices() -> Vec<Choice> {
         sampling: _,
         ycbcr_filter: _,
         texel_conversion: _,
-        // The runtime's: the texels of a carried texture's decoded twin, a heap's compressed
-        // texture's image, when the host sees a command buffer complete, how a batch begins after
-        // the earlier ones of its queue, where a render encoder's calls are lowered, and what holds
-        // a sampled texture over host pages.
-        decoded_texels: _,
+        // The runtime's: a heap's compressed texture's image, when the host sees a command buffer
+        // complete, how a batch begins after the earlier ones of its queue, where a render
+        // encoder's calls are lowered, and what holds a sampled texture over host pages.
         heap_compression: _,
         completion: _,
         batch_order: _,
@@ -79,7 +77,6 @@ fn choices() -> Vec<Choice> {
         choice!(p.sampling: SamplingPolicy { NativeDevice, Exact }),
         choice!(p.ycbcr_filter: YCbCrFilterPolicy { Device, Exact }),
         choice!(p.texel_conversion: TexelConversionPolicy { Device, Exact }),
-        choice!(p.decoded_texels: DecodedTexelsPolicy { Compact, Exact }),
         choice!(p.heap_compression: HeapCompressionPolicy { Compressed, Uncompressed }),
         choice!(p.completion: CompletionPolicy { Grouped, Exact }),
         choice!(p.batch_order: BatchOrderPolicy { Ends, Exact }),
@@ -452,24 +449,6 @@ fn the_runtime_s_render_lowering_choice_keys_no_profile() {
     for ((stem, w), (other, a)) in worker.iter().zip(&at_call) {
         assert_eq!(stem, other);
         assert_eq!(w.fingerprint(), a.fingerprint(), "{stem}");
-    }
-}
-
-/// The runtime's choice of a carried texture's decoded twin (`decoded_texels`) moves no committed
-/// profile's fingerprint: no profile carries it, so no translation follows it.
-#[test]
-fn the_runtime_s_decoded_texels_choice_keys_no_profile() {
-    use crate::spirv::testing::committed_profiles_with;
-    let codes = committed_profiles_with(DevicePolicy::UNTRUSTED).expect("profiles");
-    let exact = committed_profiles_with(DevicePolicy {
-        decoded_texels: DecodedTexelsPolicy::Exact,
-        ..DevicePolicy::UNTRUSTED
-    })
-    .expect("profiles");
-    assert_eq!(codes.len(), exact.len());
-    for ((stem, a), (other, e)) in codes.iter().zip(&exact) {
-        assert_eq!(stem, other);
-        assert_eq!(a.fingerprint(), e.fingerprint(), "{stem}");
     }
 }
 

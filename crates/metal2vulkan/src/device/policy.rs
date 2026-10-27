@@ -3,13 +3,13 @@
 
 use crate::device::profile::{GuestIsolation, HandleDomain, PointerDomain};
 
-/// Policy inputs of `Device::new`. Every field but `decoded_texels`, `heap_compression`,
-/// `completion`, `batch_order`, `render_lowering` and `host_page_textures` can change emitted
-/// code, so the profile carries it (containment as the encoding it selects) and its fingerprint
-/// covers it; those six are the runtime's alone (the texels of a carried texture's decoded twin, a
-/// heap's compressed texture's image, when the host sees a command buffer complete, how a batch
-/// begins after the earlier ones of its queue, where a render encoder's calls are lowered, and
-/// what holds a sampled texture over host pages), and no profile carries them.
+/// Policy inputs of `Device::new`. Every field but `heap_compression`, `completion`,
+/// `batch_order`, `render_lowering` and `host_page_textures` can change emitted code, so the
+/// profile carries it (containment as the encoding it selects) and its fingerprint covers it; those
+/// five are the runtime's alone (a heap's compressed texture's image, when the host sees a command
+/// buffer complete, how a batch begins after the earlier ones of its queue, where a render
+/// encoder's calls are lowered, and what holds a sampled texture over host pages), and no profile
+/// carries them.
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -38,10 +38,6 @@ pub struct DevicePolicy {
     /// shader.
     pub texel_conversion: TexelConversionPolicy,
 
-    /// Whether a texture whose format the device lacks, held in a carrier (an ASTC LDR texture,
-    /// or an EAC 11-bit one), samples a decoded twin of compact codes (the default) or of Metal's
-    /// values exactly. The runtime's choice alone: no emitted code changes.
-    pub decoded_texels: DecodedTexelsPolicy,
     /// Whether a heap's colour texture that Metal keeps losslessly compressed, on a driver whose
     /// compressed images hide writes through an alias, is the driver's compressed image (the
     /// default) or one the driver keeps uncompressed in the heap's bytes. The runtime's choice
@@ -73,10 +69,9 @@ pub struct DevicePolicy {
 impl DevicePolicy {
     /// The untrusted-guest production policy: containment and isolation on, Metal's 8-bit linear
     /// filter emulated exactly where the emulation runs, native device sampling (a two-plane YCbCr texture's samples among them),
-    /// the device's own texel conversions, compact codes in a carried texture's decoded twin, the
-    /// driver's compressed image of a heap's texture Metal keeps compressed, command buffers ready
-    /// together in one kernel submission, batches of one queue ordered by their ends where the
-    /// driver runs them one after another, and a sampled
+    /// the device's own texel conversions, the driver's compressed image of a heap's texture Metal
+    /// keeps compressed, command buffers ready together in one kernel submission, batches of one
+    /// queue ordered by their ends where the driver runs them one after another, and a sampled
     /// texture over host pages in place where the device's check passed.
     pub const UNTRUSTED: DevicePolicy = DevicePolicy {
         pointer_domain: PointerDomain::ResidentTable,
@@ -87,7 +82,6 @@ impl DevicePolicy {
         sampling: SamplingPolicy::NativeDevice,
         ycbcr_filter: YCbCrFilterPolicy::Device,
         texel_conversion: TexelConversionPolicy::Device,
-        decoded_texels: DecodedTexelsPolicy::Compact,
         heap_compression: HeapCompressionPolicy::Compressed,
         completion: CompletionPolicy::Grouped,
         batch_order: BatchOrderPolicy::Ends,
@@ -98,8 +92,7 @@ impl DevicePolicy {
     /// This policy with Metal's answer wherever the choices offer it: its texel conversions
     /// ([`TexelConversionPolicy::Exact`]), its filter of a
     /// two-plane YCbCr texture
-    /// ([`YCbCrFilterPolicy::Exact`]), its decode of a carried texture's texels
-    /// ([`DecodedTexelsPolicy::Exact`]), a heap's texture whose bytes alias the heap's
+    /// ([`YCbCrFilterPolicy::Exact`]), a heap's texture whose bytes alias the heap's
     /// as written ([`HeapCompressionPolicy::Uncompressed`]), each command buffer seen complete
     /// at its own end ([`CompletionPolicy::Exact`]), each batch ordered after the earlier ones of
     /// its queue by
@@ -112,7 +105,6 @@ impl DevicePolicy {
         DevicePolicy {
             ycbcr_filter: YCbCrFilterPolicy::Exact,
             texel_conversion: TexelConversionPolicy::Exact,
-            decoded_texels: DecodedTexelsPolicy::Exact,
             heap_compression: HeapCompressionPolicy::Uncompressed,
             completion: CompletionPolicy::Exact,
             batch_order: BatchOrderPolicy::Exact,
@@ -248,32 +240,6 @@ pub enum TexelConversionPolicy {
     /// Metal's conversion, emulated exactly by the bound format's class, of every read, and of
     /// every sample and gather where Metal's sampler is emulated: what validation compares against
     /// Metal's answers.
-    Exact,
-}
-
-/// What texels the runtime holds in the decoded twin of a texture whose blocks it holds in a
-/// carrier on a device without the format (the runtime's `texture/decoded_twin.rs`), which the
-/// texture's samples, reads and gathers read: an ASTC LDR texture's (`bind::AstcDecode`), and an
-/// EAC 11-bit texture's (`bind::EtcDecode`). Metal reads an ASTC LDR channel as a 12-bit value,
-/// `(C >> 4) / 4095` of the decode's 16-bit result, which no 8- or 16-bit texel holds; it reads
-/// an EAC 11-bit channel as `c / 2047` (signed `c / 1023`), which no 16-bit normalized code
-/// holds. (An ASTC sRGB texture's twin holds the 8-bit codes `C >> 8` under either, which its
-/// slots read raw and decode through Metal's table, exact; so does a PVRTC texture's twin, and an
-/// 8-bit ETC2 or EAC texture's.) The runtime's choice alone: no emitted code changes.
-#[non_exhaustive]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum DecodedTexelsPolicy {
-    /// Compact texels (the default): an ASTC LDR texture's `R8G8B8A8_UNORM` codes, 4 bytes a
-    /// texel, each channel the code nearest Metal's value, at most `1/510` off it. An EAC 11-bit
-    /// texture's 16-bit normalized codes (`R16_UNORM`, `R16_SNORM` and their two-channel forms),
-    /// 2 bytes a channel, each nearest Metal's value, at most half a 16-bit step off it.
-    /// Announced `decoded-texel-precision` where such a texture is made.
-    #[default]
-    Compact,
-    /// Metal's values exactly, an ASTC LDR texture's in `R32G32B32A32_SFLOAT`, 16 bytes a texel
-    /// (an EAC 11-bit texture's in `R32_SFLOAT` or `R32G32_SFLOAT`, 4 bytes a channel), where the
-    /// device samples, filters and copies into the format (else the compact texels, announced).
     Exact,
 }
 
