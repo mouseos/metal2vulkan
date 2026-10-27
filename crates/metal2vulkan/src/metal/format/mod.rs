@@ -2018,10 +2018,10 @@ pub(crate) fn integer_channels_word(pf: PixelFormat) -> u32 {
 }
 
 /// Whether the device's conversion decides the NaN a `half` texel written to a texture of pixel
-/// format `pf` stores, once the write hands it the half widened (16-bit float channels,
-/// `metal::texel_format::half_channels`) or `0x7fc00000` (a packed small float's, `RG11B10Float`, `RGB9E5Float`):
-/// the stores `DriverDeviation::MetalHalfTexelWrites` states Metal's. A 32-bit float channel stores
-/// its bits, and a normalized or integer one no NaN.
+/// format `pf` stores, once the write hands it the half widened: 16-bit float channels
+/// (`metal::texel_format::half_channels`, whose store `DriverDeviation::MetalHalfTexelWrites`
+/// states Metal's) and a packed small float's (`RG11B10Float`, `RGB9E5Float`). A 32-bit float
+/// channel stores its bits, and a normalized or integer one no NaN.
 pub fn half_write_nans_converted(pf: PixelFormat) -> bool {
     use crate::vk::NumericFormat as N;
     crate::metal::texel_format::half_channels(pf)
