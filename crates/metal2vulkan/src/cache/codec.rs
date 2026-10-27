@@ -1268,10 +1268,7 @@ codec_enum! {
         MovableStorageWrites { early_variant },
         SynthesizedGeometry { weights, layer, viewport },
         ObjectThreadgroupArena { static_bytes, payload },
-        ExactFormsOverCompilerLimit {
-            sampling,
-            texel_conversion
-        },
+        ExactFormsOverCompilerLimit { sampling },
         MergedDraws,
         QuadPrimitiveIds,
         PrivateList,

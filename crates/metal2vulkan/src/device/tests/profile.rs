@@ -307,19 +307,12 @@ fn below_1_2_and_contradictory_policies_are_refused() {
 }
 
 /// Each of the policy's choices between the device's answer and Metal's, with a function that
-/// flips it alone: the texel conversions and the filter of a two-plane YCbCr texture.
-fn exactness_flips() -> [(&'static str, fn(DevicePolicy) -> DevicePolicy); 2] {
+/// flips it alone: the filter of a two-plane YCbCr texture.
+fn exactness_flips() -> [(&'static str, fn(DevicePolicy) -> DevicePolicy); 1] {
     use crate::device::{
-        TexelConversionPolicy as T, YCbCrFilterPolicy as Y,
+        YCbCrFilterPolicy as Y,
     };
     [
-        ("texel_conversion", |p| DevicePolicy {
-            texel_conversion: match p.texel_conversion {
-                T::Device => T::Exact,
-                T::Exact => T::Device,
-            },
-            ..p
-        }),
         ("ycbcr_filter", |p| DevicePolicy {
             ycbcr_filter: match p.ycbcr_filter {
                 Y::Device => Y::Exact,
@@ -330,8 +323,8 @@ fn exactness_flips() -> [(&'static str, fn(DevicePolicy) -> DevicePolicy); 2] {
     ]
 }
 
-/// On MoltenVK on the M3, each choice still moves the key: the texel conversions' is the policy's
-/// own field there, and the YCbCr filter's moves whether a two-plane YCbCr slot takes its variant
+/// On MoltenVK on the M3, each choice still moves the key: the YCbCr filter's moves whether a
+/// two-plane YCbCr slot takes its variant
 /// (`ProfileFields::ycbcr_variant`), Metal's sampler filtering such a texture's converted texels
 /// otherwise.
 #[test]

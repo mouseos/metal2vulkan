@@ -665,18 +665,13 @@ pub struct Sampling {
     /// [`SamplerWord::PIXEL_COORDINATES`] alone.
     pub centre_word: u32,
     /// Whether the access reads one texel of one level: its `half` texel's lanes for the class's
-    /// conversion, and whether a `float` one converts.
+    /// conversion.
     pub one_texel: crate::lower::texture::OneTexel,
     /// A `half` texel of the slot, or of the heap color texture, converts by the bound format's
     /// class (`texture::half`): not a raw, bicubic or depth one's, nor where the sample's texel is
-    /// the device's (`texture::device_texels`: native device sampling, or
-    /// `TexelConversionPolicy::Device`), rounded exactly. The emission follows it, so a module
-    /// whose reads convert by the class (`TexelConversionPolicy::Exact`) leaves a natively
-    /// sampled texel the device's.
+    /// the device's (`texture::device_texels`: a device that does not sample through Metal's own
+    /// sampler), rounded exactly. The emission follows it.
     pub half_texel: bool,
-    /// A `float` texel of the slot converts by the bound format's class (`float_texel`), where
-    /// [`one_texel`](Self::one_texel) holds.
-    pub float_texel: bool,
     /// A [`centred`](Self::centred) sample through a runtime or argument buffer's sampler with a
     /// texel offset, on a device without `VkProperty::MetalSampler`, which adds the offset to the
     /// texel it reads before addressing it: the texel's centre moves back by the offset on an
@@ -1172,18 +1167,6 @@ impl Sampling {
                     _ => 0,
                 };
                 crate::lower::texture::half::CALL_WORDS.max(f.read_words()) + class
-            }
-            // A heap color texture's `float` texel likewise, and its call.
-            (_, Some(f))
-                if self.float_texel
-                    && matches!(
-                        self.source,
-                        Source::Heap { .. } | Source::HeapSampler { .. }
-                    ) =>
-            {
-                crate::lower::texture::HEAP_CLASS_WORDS
-                    + crate::lower::texture::float_texel::CALL_WORDS
-                    + f.read_words()
             }
             (_, Some(f)) => f.read_words(),
         };

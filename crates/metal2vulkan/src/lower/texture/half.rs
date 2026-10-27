@@ -350,7 +350,7 @@ impl PackedField {
 /// The code scales `S` of a packed class's channels (`TexelFormat::PACKED`) as `u32` lanes, a
 /// gather's lanes each its channel's (`channel` below 4), 1 in every lane for any other field;
 /// whether the field states coded channels (a field with scales); and whether it is
-/// `PackedTexels::SmallFloat`. Shared with the `float` routine (`float_texel`).
+/// `PackedTexels::SmallFloat`.
 pub(crate) fn packed_scales(
     fb: &mut FunctionBuilder<'_>,
     flags: SValue,

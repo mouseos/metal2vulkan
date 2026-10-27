@@ -3946,74 +3946,6 @@ fn a_pipelines_texture_notes_follow_its_bound_format_and_sampler() {
     }
 }
 
-/// An access that reads one texel converts its texel from its codes. Through a nearest constexpr
-/// sampler on lavapipe a `half` sample of a packed format takes no `HalfTexelConversion` (its
-/// class's packed arm), and neither does a normalized one; through a linear sampler neither does a
-/// packed format (Metal's filter of it is emulated), and a compressed one keeps it. A `float` read
-/// or nearest sample declares the slot's `TexelFormat` and the module's `float` routine where the
-/// device's sampler is not Metal's own, and not on MoltenVK.
-#[test]
-fn a_texel_read_as_one_texel_converts_from_its_codes() {
-    use crate::metal::TextureType;
-    use crate::pipeline::sym::SpecKey;
-    use PrecisionNote::HalfTexelConversion;
-    let lvp = device_of("lavapipe");
-    let m3 = device_of("moltenvk-m3");
-    let nearest = sampler_words(0, 0, 1, false, 0);
-    let plane = Form::Plain { offset: (0, 0) };
-    let Some(bc) = assemble("one texel half", &kernel(Some(nearest), plane)) else {
-        return;
-    };
-    let p = notes_pipeline(&lvp, &bc);
-    for pf in [
-        PixelFormat::RGB10A2Unorm,
-        PixelFormat::B5G6R5Unorm,
-        PixelFormat::RG11B10Float,
-        PixelFormat::RGBA8Unorm,
-    ] {
-        let notes = notes_bound(&p, &lvp, (TextureType::Type2D, pf), None);
-        assert!(
-            !notes.contains(&HalfTexelConversion),
-            "nearest {pf:?}: {notes:?}"
-        );
-    }
-    let Some(bc) = assemble("filtered half", &kernel(Some(linear(1, false, 0)), plane)) else {
-        return;
-    };
-    let p = notes_pipeline(&lvp, &bc);
-    for (pf, noted) in [
-        (PixelFormat::RGB10A2Unorm, false),
-        (PixelFormat::RG11B10Float, false),
-        (PixelFormat::BC7RGBAUnorm, true),
-    ] {
-        let notes = notes_bound(&p, &lvp, (TextureType::Type2D, pf), None);
-        assert_eq!(
-            notes.contains(&HalfTexelConversion),
-            noted,
-            "linear {pf:?}: {notes:?}"
-        );
-    }
-    let Some(bc) = assemble("one texel float", &kernel_of(Some(nearest), plane, true)) else {
-        return;
-    };
-    for (stem, dev, converts) in [("lavapipe", &lvp, true), ("moltenvk-m3", &m3, false)] {
-        let p = notes_pipeline(dev, &bc);
-        // The class, which the function reads from its push field.
-        let class = p
-            .interface
-            .push
-            .iter()
-            .flat_map(|placement| &placement.fields)
-            .any(|f| matches!(f.field, PushField::Specialized(SpecKey::TexelFormat(_))));
-        let routine = p
-            .stage
-            .strategies
-            .entries
-            .contains_key(crate::lower::texture::float_texel::CENSUS_NAME);
-        assert_eq!((class, routine), (converts, converts), "{stem}");
-    }
-}
-
 /// Each function of SPIR-V module `words`: its result id, its function control, and the callees
 /// of its `OpFunctionCall`s, with the result ids of those calls an `OpSelect` reads.
 struct ModuleFunctions {
@@ -4369,41 +4301,15 @@ declare {{ {vec4}, i8 }} @air.read_texture_2d.{suffix}(ptr addrspace(1), ptr add
     )
 }
 
-/// Under the default policies, on a device that does not sample through Metal's own texture unit, a
-/// texel's `float` or `half` value is the device's conversion (native device sampling): a sample's
-/// and a read's module defines neither conversion routine and records `DeviceTexelConversion`
-/// (`float`) or `HalfTexelConversion` (`half`), and the sample reads no field of a runtime
-/// sampler's word for it, so a sampler of normalized coordinates keys no pipeline (what still reads
-/// the word is a pixel sampler's, gated on its pixel bit). `TexelConversionPolicy::Exact` alone
-/// makes a read Metal's conversion by the bound format's class through the routine, recording no
-/// `DeviceTexelConversion`, and leaves a natively sampled texel the device's; under
-/// `SamplingPolicy::Exact` the emulation converts a sample's by the class only where
-/// `TexelConversionPolicy::Exact` says. On MoltenVK, which samples through Metal's own sampler, the
-/// default keeps that device's form.
+/// On a device that does not sample through Metal's own texture unit, a texel's `float` or `half`
+/// value is the device's conversion: a sample's and a read's module defines no conversion routine
+/// and records `DeviceTexelConversion` (`float`) or `HalfTexelConversion` (`half`), and the sample
+/// reads no field of a runtime sampler's word for it, so a sampler of normalized coordinates keys
+/// no pipeline (what still reads the word is a pixel sampler's, gated on its pixel bit). On
+/// MoltenVK, which samples through Metal's own sampler, no `DeviceTexelConversion` is recorded.
 #[test]
-fn texel_conversions_are_the_device_s_by_default() {
-    use crate::device::{SamplingPolicy, TexelConversionPolicy};
-    use crate::lower::texture::{float_texel, half};
-    let policy = |sampling, texel_conversion| DevicePolicy {
-        sampling,
-        texel_conversion,
-        ..DevicePolicy::default()
-    };
-    // (the policy, whether a sample's conversion is the routine's, whether a read's is)
-    let policies = [
-        (DevicePolicy::default(), false, false),
-        (
-            policy(SamplingPolicy::NativeDevice, TexelConversionPolicy::Exact),
-            false,
-            true,
-        ),
-        (
-            policy(SamplingPolicy::Exact, TexelConversionPolicy::Device),
-            false,
-            false,
-        ),
-        (EXACT_SAMPLING, true, true),
-    ];
+fn texel_conversions_are_the_device_s() {
+    use crate::lower::texture::half;
     for float in [false, true] {
         let what = if float { "float" } else { "half" };
         let kernel = kernel_of(None, Form::Plain { offset: (0, 0) }, float);
@@ -4413,55 +4319,39 @@ fn texel_conversions_are_the_device_s_by_default() {
         let Some(read) = assemble(&format!("read {what}"), &read_kernel_of(float)) else {
             return;
         };
-        let (routine, note) = match float {
-            true => (
-                float_texel::CENSUS_NAME,
-                PrecisionNote::DeviceTexelConversion,
-            ),
-            false => (half::CENSUS_NAME, PrecisionNote::HalfTexelConversion),
+        let note = match float {
+            true => PrecisionNote::DeviceTexelConversion,
+            false => PrecisionNote::HalfTexelConversion,
         };
         for stem in ["lavapipe", "nvidia-rtx5080-laptop", "amd-780m-radv"] {
-            for (p, exact, exact_read) in policies {
-                let what = format!("{stem} {what} {:?} {:?}", p.sampling, p.texel_conversion);
-                let device = profile(stem, p).expect("profile");
-                let a = compile(&bc, "k", &device).unwrap_or_else(|e| panic!("{what}: {e}"));
-                assert_eq!(
-                    a.strategies.entries.contains_key(routine),
-                    exact,
-                    "{what}: Metal's conversion is the routine's"
-                );
-                if !exact || float {
-                    assert_eq!(a.precision.contains(&note), !exact, "{what}: {note:?}");
-                }
-                // A read: Metal's conversion where the policy alone says so.
-                let r = compile(&read, "k", &device).unwrap_or_else(|e| panic!("{what} read: {e}"));
-                link_and_validate(&r, &device).unwrap_or_else(|e| panic!("{what} read: L3: {e}"));
-                assert_eq!(
-                    r.strategies.entries.contains_key(routine),
-                    exact_read,
-                    "{what} read: Metal's conversion is the routine's"
-                );
-                if !exact_read || float {
-                    assert_eq!(
-                        r.precision.contains(&note),
-                        !exact_read,
-                        "{what} read: {note:?} in {:?}",
-                        r.precision
-                    );
-                }
-                if p.sampling != SamplingPolicy::NativeDevice {
+            let what = format!("{stem} {what}");
+            let device = profile(stem, DevicePolicy::default()).expect("profile");
+            let a = compile(&bc, "k", &device).unwrap_or_else(|e| panic!("{what}: {e}"));
+            assert!(
+                !a.strategies.entries.contains_key(half::CENSUS_NAME),
+                "{what}: no conversion routine"
+            );
+            assert!(a.precision.contains(&note), "{what}: {note:?}");
+            let r = compile(&read, "k", &device).unwrap_or_else(|e| panic!("{what} read: {e}"));
+            link_and_validate(&r, &device).unwrap_or_else(|e| panic!("{what} read: L3: {e}"));
+            assert!(
+                !r.strategies.entries.contains_key(half::CENSUS_NAME),
+                "{what} read: no conversion routine"
+            );
+            assert!(
+                r.precision.contains(&note),
+                "{what} read: {note:?} in {:?}",
+                r.precision
+            );
+            for key in a.interface.read_keys() {
+                let SpecKey::SamplerState { fields, .. } = key else {
                     continue;
-                }
-                for key in a.interface.read_keys() {
-                    let SpecKey::SamplerState { fields, .. } = key else {
-                        continue;
-                    };
-                    let read = match fields & SamplerWord::PIXEL_GATED {
-                        0 => SamplerWord::PIXEL_COORDINATES,
-                        _ => SamplerWord::PIXEL_NEAREST | SamplerWord::PIXEL_GATED,
-                    };
-                    assert_eq!(fields & !read, 0, "{what}: {key:?}");
-                }
+                };
+                let read = match fields & SamplerWord::PIXEL_GATED {
+                    0 => SamplerWord::PIXEL_COORDINATES,
+                    _ => SamplerWord::PIXEL_NEAREST | SamplerWord::PIXEL_GATED,
+                };
+                assert_eq!(fields & !read, 0, "{what}: {key:?}");
             }
         }
         let m = profile("moltenvk-m3", DevicePolicy::default()).expect("profile");
@@ -4469,107 +4359,6 @@ fn texel_conversions_are_the_device_s_by_default() {
         assert!(
             !c.precision.contains(&PrecisionNote::DeviceTexelConversion),
             "moltenvk-m3 {what}: Metal's own sampler"
-        );
-    }
-}
-
-/// A kernel that reads `texture2d<half, sample>` slot 0 at its thread's position and samples it
-/// through runtime sampler 0, storing both `half4`s to buffer 0.
-const READ_AND_SAMPLE: &str = r#"define void @k(ptr addrspace(1) %t, ptr addrspace(1) %out, ptr addrspace(2) %s, i32 %tid) {
-  %i = zext i32 %tid to i64
-  %xy = insertelement <2 x i32> zeroinitializer, i32 %tid, i64 0
-  %rs = call ptr addrspace(2) @air.get_read_sampler()
-  %r = call { <4 x half>, i8 } @air.read_texture_2d.v4f16(ptr addrspace(1) %t, ptr addrspace(2) %rs, <2 x i32> %xy, <2 x i32> zeroinitializer, i32 0, i32 1)
-  %rv = extractvalue { <4 x half>, i8 } %r, 0
-  %u = uitofp i32 %tid to float
-  %uv = insertelement <2 x float> <float poison, float 0.5>, float %u, i64 0
-  %q = call { <4 x half>, i8 } @air.sample_texture_2d.v4f16(ptr addrspace(1) %t, ptr addrspace(2) %s, <2 x float> %uv, i1 true, <2 x i32> zeroinitializer, i1 false, float 0.0, float 0.0, i32 0)
-  %qv = extractvalue { <4 x half>, i8 } %q, 0
-  %j = shl i64 %i, 1
-  %pr = getelementptr inbounds <4 x half>, ptr addrspace(1) %out, i64 %j
-  store <4 x half> %rv, ptr addrspace(1) %pr, align 8
-  %k1 = or i64 %j, 1
-  %pq = getelementptr inbounds <4 x half>, ptr addrspace(1) %out, i64 %k1
-  store <4 x half> %qv, ptr addrspace(1) %pq, align 8
-  ret void
-}
-
-declare ptr addrspace(2) @air.get_read_sampler()
-declare { <4 x half>, i8 } @air.read_texture_2d.v4f16(ptr addrspace(1), ptr addrspace(2), <2 x i32>, <2 x i32>, i32, i32)
-declare { <4 x half>, i8 } @air.sample_texture_2d.v4f16(ptr addrspace(1), ptr addrspace(2), <2 x float>, i1, <2 x i32>, i1, float, float, i32)
-
-!air.kernel = !{!0}
-!0 = !{ptr @k, !1, !2}
-!1 = !{}
-!2 = !{!3, !4, !5, !6}
-!3 = !{i32 0, !"air.texture", !"air.location_index", i32 0, i32 1, !"air.sample", !"air.arg_type_name", !"texture2d<half, sample>", !"air.arg_name", !"t"}
-!4 = !{i32 1, !"air.buffer", !"air.location_index", i32 0, i32 1, !"air.read_write", !"air.address_space", i32 1, !"air.arg_type_size", i32 8, !"air.arg_type_align_size", i32 8, !"air.arg_type_name", !"half4", !"air.arg_name", !"out"}
-!5 = !{i32 2, !"air.sampler", !"air.location_index", i32 0, i32 1, !"air.arg_type_name", !"sampler", !"air.arg_name", !"s"}
-!6 = !{i32 3, !"air.thread_position_in_grid", !"air.arg_type_name", !"uint", !"air.arg_name", !"tid"}
-"#;
-
-/// The `OpFunctionCall`s of a module.
-fn calls(words: &[u32]) -> usize {
-    const OP_FUNCTION_CALL: u32 = 57;
-    let mut n = 0;
-    let mut i = 5;
-    while i < words.len() {
-        n += usize::from(words[i] & 0xFFFF == OP_FUNCTION_CALL);
-        i += ((words[i] >> 16) as usize).max(1);
-    }
-    n
-}
-
-/// A `half` texel the read converts by the class and the sample leaves to the device, in one
-/// function of one slot: under `TexelConversionPolicy::Exact` with native device sampling, the slot
-/// declares its class and the module the routine for the read, and the sample (whose texel the
-/// device's sampler answers, `Sampling::half_texel`) calls nothing more than the read alone does,
-/// records `HalfTexelConversion`, and the module passes L3. Under `SamplingPolicy::Exact` both
-/// convert, the sample through the routine too.
-#[test]
-fn a_read_converts_by_the_class_beside_a_natively_sampled_texel() {
-    use crate::device::{SamplingPolicy, TexelConversionPolicy};
-    use crate::lower::texture::half;
-    let (Some(mixed), Some(read)) = (
-        assemble("read and sample", READ_AND_SAMPLE),
-        assemble("read half", &read_kernel_of(false)),
-    ) else {
-        return;
-    };
-    let native = DevicePolicy {
-        texel_conversion: TexelConversionPolicy::Exact,
-        ..DevicePolicy::default()
-    };
-    for stem in ["lavapipe", "nvidia-rtx5080-laptop"] {
-        let device = profile(stem, native).expect("profile");
-        let a = compile(&mixed, "k", &device).unwrap_or_else(|e| panic!("{stem}: {e}"));
-        link_and_validate(&a, &device).unwrap_or_else(|e| panic!("{stem}: L3: {e}"));
-        let r = compile(&read, "k", &device).unwrap_or_else(|e| panic!("{stem} read: {e}"));
-        assert!(
-            a.strategies.entries.contains_key(half::CENSUS_NAME),
-            "{stem}"
-        );
-        assert!(
-            a.precision.contains(&PrecisionNote::HalfTexelConversion),
-            "{stem}: {:?}",
-            a.precision
-        );
-        assert_eq!(
-            calls(&a.module.words),
-            calls(&r.module.words),
-            "{stem}: the sample calls no conversion"
-        );
-        let exact = profile(stem, EXACT_SAMPLING).expect("profile");
-        let e = compile(&mixed, "k", &exact).unwrap_or_else(|e| panic!("{stem} exact: {e}"));
-        link_and_validate(&e, &exact).unwrap_or_else(|e| panic!("{stem} exact: L3: {e}"));
-        assert!(
-            calls(&e.module.words) > calls(&a.module.words),
-            "{stem}: the emulated sample converts through the routine"
-        );
-        assert_eq!(
-            SamplingPolicy::NativeDevice,
-            native.sampling,
-            "the default samples natively"
         );
     }
 }

@@ -500,8 +500,6 @@ pub struct ProfileFields {
     pub handle_domain: HandleDomain,
     pub containment: Containment,
     pub isolation: GuestIsolation,
-    /// Whether a texel's value is the device's conversion or Metal's (the policy's).
-    pub texel_conversion: crate::device::policy::TexelConversionPolicy,
     pub leaf: LeafCaps,
     pub subgroup: SubgroupModel,
     pub images: ImageCaps,

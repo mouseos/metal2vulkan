@@ -33,10 +33,6 @@ pub struct DevicePolicy {
     /// two-plane YCbCr texture is the device's own filter of its texels (the default) or Metal's
     /// filter of the format, emulated in a variant of the pipeline the draw binding it makes.
     pub ycbcr_filter: YCbCrFilterPolicy,
-    /// Whether a texel's `float` or `half` value is the device's conversion of its codes (native
-    /// device sampling, the default off Apple's GPUs) or Metal's, converted exactly in the
-    /// shader.
-    pub texel_conversion: TexelConversionPolicy,
 
     /// Whether a heap's colour texture that Metal keeps losslessly compressed, on a driver whose
     /// compressed images hide writes through an alias, is the driver's compressed image (the
@@ -69,9 +65,9 @@ pub struct DevicePolicy {
 impl DevicePolicy {
     /// The untrusted-guest production policy: containment and isolation on, Metal's 8-bit linear
     /// filter emulated exactly where the emulation runs, native device sampling (a two-plane YCbCr texture's samples among them),
-    /// the device's own texel conversions, the driver's compressed image of a heap's texture Metal
-    /// keeps compressed, command buffers ready together in one kernel submission, batches of one
-    /// queue ordered by their ends where the driver runs them one after another, and a sampled
+    /// the driver's compressed image of a heap's texture Metal keeps compressed, command buffers
+    /// ready together in one kernel submission, batches of one queue ordered by their ends where
+    /// the driver runs them one after another, and a sampled
     /// texture over host pages in place where the device's check passed.
     pub const UNTRUSTED: DevicePolicy = DevicePolicy {
         pointer_domain: PointerDomain::ResidentTable,
@@ -81,7 +77,6 @@ impl DevicePolicy {
         unorm8_linear_filter: Unorm8LinearFilterPolicy::Exact,
         sampling: SamplingPolicy::NativeDevice,
         ycbcr_filter: YCbCrFilterPolicy::Device,
-        texel_conversion: TexelConversionPolicy::Device,
         heap_compression: HeapCompressionPolicy::Compressed,
         completion: CompletionPolicy::Grouped,
         batch_order: BatchOrderPolicy::Ends,
@@ -89,8 +84,7 @@ impl DevicePolicy {
         host_page_textures: HostPageTexturePolicy::InPlace,
     };
 
-    /// This policy with Metal's answer wherever the choices offer it: its texel conversions
-    /// ([`TexelConversionPolicy::Exact`]), its filter of a
+    /// This policy with Metal's answer wherever the choices offer it: its filter of a
     /// two-plane YCbCr texture
     /// ([`YCbCrFilterPolicy::Exact`]), a heap's texture whose bytes alias the heap's
     /// as written ([`HeapCompressionPolicy::Uncompressed`]), each command buffer seen complete
@@ -104,7 +98,6 @@ impl DevicePolicy {
     pub const fn exact_answers(self) -> DevicePolicy {
         DevicePolicy {
             ycbcr_filter: YCbCrFilterPolicy::Exact,
-            texel_conversion: TexelConversionPolicy::Exact,
             heap_compression: HeapCompressionPolicy::Uncompressed,
             completion: CompletionPolicy::Exact,
             batch_order: BatchOrderPolicy::Exact,
@@ -206,40 +199,6 @@ pub enum YCbCrFilterPolicy {
     /// Metal's filter of the format, emulated: a draw that binds such a texture at a slot the
     /// function samples linearly takes the slot's YCbCr variant (`RuntimeFact::YCbCrTexture`), a
     /// pipeline of its own, made at that draw.
-    Exact,
-}
-
-/// How a texel's value reaches a read, sample or gather with a `float` or `half` result on a
-/// device that does not sample through Metal's own texture unit (`VkProperty::MetalSampler`). On
-/// such a device Metal's conversion of a texel is emulated by a routine that tells the bound
-/// format's class apart at every access, and the class is data, so no driver folds it: on the
-/// consumer's fragments those routines were most of the driver's making time (296 calls
-/// in `Xgc`, 311 in `A2Xghfc`).
-///
-/// The choice is made per access. A read's texel is this policy's. A sample's or gather's is too
-/// where Metal's sampler is emulated ([`SamplingPolicy::Exact`]); under native device sampling
-/// ([`SamplingPolicy::NativeDevice`], the module requiring `VkProperty::DeviceSampling`) it is the
-/// device's under either policy: the device's sampler decodes its samples and gathers, and an exact
-/// conversion of a sample's texel reads the runtime sampler's filter to tell one texel from a
-/// filtered sum, which splits the pipeline by the bound sampler state. Measured on the RTX 5080
-/// Laptop GPU, `Exact`'s reads cost the consumer's `Xgc` 3 to 5% of its making and 4 to 18% of its
-/// GPU time per draw.
-#[non_exhaustive]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum TexelConversionPolicy {
-    /// Native device sampling, the default (the owner's ruling of 2026-10-11: making time before
-    /// exactness off Apple's GPUs, with the bound recorded and announced): the device's `float`
-    /// value of each texel, and its `half` rounded to nearest even. Such an access records
-    /// [`PrecisionNote::DeviceTexelConversion`](crate::pipeline::PrecisionNote::DeviceTexelConversion)
-    /// (`float`) or
-    /// [`PrecisionNote::HalfTexelConversion`](crate::pipeline::PrecisionNote::HalfTexelConversion)
-    /// (`half`), whose docs state the bound.
-    #[default]
-    Device,
-    /// Metal's conversion, emulated exactly by the bound format's class, of every read, and of
-    /// every sample and gather where Metal's sampler is emulated: what validation compares against
-    /// Metal's answers.
     Exact,
 }
 

@@ -123,7 +123,6 @@ mod alpha;
 mod atomic;
 mod cooperative;
 mod emit;
-pub mod float_texel;
 pub mod half;
 pub(crate) mod heap_raw;
 mod slice;
@@ -134,13 +133,12 @@ pub(crate) use absent::absent_arm;
 pub use absent::ABSENT_ARM;
 pub use atomic::TexAtomic;
 pub(crate) use emit::{
-    constant_lanes, constant_lanes_by, dispatch, extended_table, float_class, half_by_class,
-    half_class, heap_element, heap_float_class, heap_half_class, heap_raw_form, heap_raw_image,
-    live_or_zero, reinterpret, resident_access, rgb9e5_word, slot_image, sparse_spec,
-    srgb_filtered_texel, srgb_raw_gather, srgb_raw_tap, srgb_raw_texel, swizzled_float,
-    swizzled_gather, swizzled_held, texel_format_const, tile_map, tiled_word, with_word, HalfClass,
-    NullLeaf, TileLevel, RGB9E5_WORDS, SRGB_FILTERED_WORDS, SRGB_RAW_WORDS, SRGB_TAP_WORDS,
-    SRGB_TEXEL,
+    constant_lanes, constant_lanes_by, dispatch, extended_table, half_by_class, half_class,
+    heap_element, heap_half_class, heap_raw_form, heap_raw_image, live_or_zero, reinterpret,
+    resident_access, rgb9e5_word, slot_image, sparse_spec, srgb_filtered_texel, srgb_raw_gather,
+    srgb_raw_tap, srgb_raw_texel, swizzled_float, swizzled_gather, swizzled_held,
+    texel_format_const, tile_map, tiled_word, with_word, HalfClass, NullLeaf, TileLevel,
+    RGB9E5_WORDS, SRGB_FILTERED_WORDS, SRGB_RAW_WORDS, SRGB_TAP_WORDS, SRGB_TEXEL,
 };
 pub use emit::{emit, held_texel, to_image};
 pub(crate) use slot::depth_comparison;
@@ -317,9 +315,6 @@ pub struct Read {
     /// where the handle's class index is `A8Unorm`'s, on a device that holds such a texture's alpha
     /// in red ([`heap_alpha_in_red`]).
     pub heap_alpha_red: bool,
-    /// A `float` texel of the slot converts by the bound format's class (`float_texel`): its
-    /// code recovered from the device's value and divided exactly.
-    pub float_texel: bool,
     /// The read, of a slot's color texture on a profile whose sparse textures are sparse images
     /// (it enables `shaderResourceResidency`), sets the lanes Metal reads as constants (a channel
     /// the format lacks, through the swizzle) after it, from the slot's `ConstantLanes`
@@ -381,11 +376,6 @@ fn read_words(r: &Read) -> u32 {
             crate::lower::arith::extended_range::DECODE_WORDS + r.texel.read_words()
         } else if r.texel.conv == TexelConv::F16 {
             half::CALL_WORDS.max(r.texel.read_words())
-        } else if r.float_texel {
-            // A heap texture's call reads the class its handle carries first.
-            float_texel::CALL_WORDS
-                + r.texel.read_words()
-                + if r.image.heap() { HEAP_CLASS_WORDS } else { 0 }
         } else {
             r.texel.read_words()
         };
@@ -912,10 +902,6 @@ pub struct TexturePlan {
     /// Some heap color texture's sample or gather has a `half` result, which converts by the
     /// class its handle carries (`emit::heap_half_class`): the module defines the `half` routine.
     pub heap_half: bool,
-    /// Some heap color texture's read, gather or sample with a `float` result may read one
-    /// texel, which converts by the class its handle carries (`emit::heap_float_class`): the module
-    /// defines the `float` routine.
-    pub heap_float: bool,
     /// The results of the heap reads that decode a member of a form a heap reads
     /// (`ExtendedRange::HEAP_READ`): `false` a `float` one, `true` a `half` one. The module
     /// defines that decode's routine for each ([`heap_raw::define`]).
@@ -1013,9 +999,6 @@ pub struct Declared {
     /// The `PlainHalfTexels` specialization constant of each slot of those on a device whose
     /// routine tells apart Metal's sampler's families alone (`half::HalfFamilies::MetalSampler`).
     pub plain_half: BTreeMap<u32, SValue>,
-    /// The module's routine converting one texel to a `float` result by the class
-    /// ([`float_texel::define`]), defined once where a slot takes it.
-    pub float_routine: Option<FuncId>,
     /// The `TextureSwizzle` specialization constant of each texture buffer slot whose reads
     /// apply the bound texture buffer's swizzle, and of each storage slot of
     /// `LoweringInputs::swizzled_storage` whose reads and writes apply the bound texture's, or
@@ -1257,9 +1240,6 @@ pub fn declare(
             )?;
             d.plain_half.insert(*index, mb.const_value(c)?);
         }
-        if s.float_format && d.float_routine.is_none() {
-            d.float_routine = Some(float_texel::define(mb)?);
-        }
         if s.swizzle {
             let u32_ = mb.ty(SType::Int {
                 width: 32,
@@ -1352,9 +1332,6 @@ pub fn declare(
     }
     if plan.families.texture.heap_half && d.half_routine.is_none() {
         d.half_routine = Some(half::define(mb, plan.families.texture.half_families)?);
-    }
-    if plan.families.texture.heap_float && d.float_routine.is_none() {
-        d.float_routine = Some(float_texel::define(mb)?);
     }
     Ok(d)
 }
@@ -1679,88 +1656,37 @@ pub(crate) fn half_texel_nans(
     }
 }
 
-/// A read, gather, or sample of `image`, of shape `shape`, with a `float` result that may read
-/// one texel (`one` not [`OneTexel::Never`]): on a color texture slot, a texture buffer's included,
-/// on a profile without Metal's own sampler (`VkProperty::MetalSampler`, whose device value is
-/// Metal's), its texel converts by the bound format's class (`float_texel`), which the slot's
-/// `TexelFormat` specialization gives (`RuntimeFact::TexelFormat`); a heap color texture's (not a
-/// texture buffer's) by the class its handle carries, which the module reads from the handle
-/// (`AccessPlan::heap_class`). Whether it does. Nothing is noted: the conversion is exact where the
-/// class names a normalized family, a packed one or a half-float one, and the device's value
-/// elsewhere, as before. A heap's texture buffer carries no class, so it is not converted, and a
-/// half-float texel's NaN there stays the device's: `PrecisionNote::DeviceNanEncoding`.
-///
-/// A depth texture's too, a comparison's never (its caller's test): Metal reads and samples one
-/// texel of `Depth16Unorm` as `c / 65535` correctly rounded (every code), its
-/// class `R16Unorm`'s, where a device may multiply by the reciprocal (lavapipe: 512 codes one ulp
-/// off); a 32-bit float depth's class keeps the device's value. A heap's depth texture's handle
-/// carries that class as a colour one's does (`metal::texel_format::heap_class` of its format), so
-/// it converts by it alike.
-pub(crate) fn float_texels(
+/// Record what a read, gather, or sample of `image`, of shape `shape`, with a `float` result that
+/// may read one texel (`one` not [`OneTexel::Never`]) answers on a profile without Metal's own
+/// sampler (`VkProperty::MetalSampler`, whose device value is Metal's): the device's conversion of
+/// the texel's codes, `PrecisionNote::DeviceTexelConversion`; of a heap's texture buffer, which no
+/// class reaches, a half-float texel's NaN the device's decode, `PrecisionNote::DeviceNanEncoding`.
+pub(crate) fn float_texel_notes(
     cx: &mut SelectCx<'_>,
     image: ImageRef,
     shape: ImageShape,
     one: OneTexel,
-    device: bool,
-) -> Result<bool, Error> {
-    if one == OneTexel::Never {
-        return Ok(false);
+) {
+    if one == OneTexel::Never || !device_texels(cx) {
+        return;
     }
-    let metal_sampler = cx
-        .profile
-        .fields()
-        .enabled
-        .properties
-        .contains(&crate::device::requirements::VkProperty::MetalSampler);
-    if metal_sampler {
-        return Ok(false);
-    }
-    // Native device sampling: the device's value, but where a heap's texture buffer notes its
-    // NaN below (it carries no class to convert by under either policy).
-    let heap_buffer = image.heap() && shape.dim == ImageDim::Buffer;
-    if device && !heap_buffer {
-        cx.precision.insert(PrecisionNote::DeviceTexelConversion);
-        return Ok(false);
-    }
-    let index = match image {
-        ImageRef::Slot(index) => index,
-        ImageRef::Heap { .. } if shape.dim != ImageDim::Buffer => {
-            cx.families.texture.heap_float = true;
-            cx.families.access.heap_class = true;
-            return Ok(true);
-        }
-        // A heap's texture buffer carries no class: a half-float texel's NaN stays the device's.
-        ImageRef::Heap { .. } => {
-            cx.precision.insert(PrecisionNote::DeviceNanEncoding);
-            return Ok(false);
-        }
+    let note = match image.heap() && shape.dim == ImageDim::Buffer {
+        true => PrecisionNote::DeviceNanEncoding,
+        false => PrecisionNote::DeviceTexelConversion,
     };
-    let slot = slot_of(cx, index)?.slot;
-    if let Some(s) = cx.families.texture.slots.get_mut(&index) {
-        s.float_format = true;
-    }
-    cx.facts
-        .insert(crate::pipeline::facts::RuntimeFact::TexelFormat { slot });
-    Ok(true)
+    cx.precision.insert(note);
 }
 
 /// Whether an access's `float` or `half` texel is the device's conversion: on a profile whose
 /// device does not sample through Metal's own texture unit (`VkProperty::MetalSampler`, whose value
-/// is Metal's and keeps the conversion), where the policy says so (`TexelConversionPolicy::Device`,
-/// the default), and for a sample or gather (`sampled`) also where the device's sampler answers it
-/// (`DeviceProfile::device_samples`, `SamplingPolicy::NativeDevice`), whose conversion of a
-/// sample's one texel would read the runtime sampler's filter and split the pipeline by it. A
-/// read's texel under `TexelConversionPolicy::Exact` is Metal's conversion on every sampling
-/// policy. Every access of a kind agrees: the selection states a sample's `half` conversion on the
-/// access (`Sampling::half_texel`), which the emission follows.
-pub(crate) fn device_texels(cx: &SelectCx<'_>, sampled: bool) -> bool {
-    let fields = cx.profile.fields();
-    let metal = fields
+/// is Metal's and keeps the conversion). Every access of a kind agrees: the selection states a
+/// sample's `half` conversion on the access (`Sampling::half_texel`), which the emission follows.
+pub(crate) fn device_texels(cx: &SelectCx<'_>) -> bool {
+    !cx.profile
+        .fields()
         .enabled
         .properties
-        .contains(&crate::device::requirements::VkProperty::MetalSampler);
-    let policy = fields.texel_conversion == crate::device::TexelConversionPolicy::Device;
-    !metal && (policy || (sampled && cx.profile.device_samples()))
+        .contains(&crate::device::requirements::VkProperty::MetalSampler)
 }
 
 /// The families the module's `half` routine tells apart (`half::HalfFamilies`): on a device whose
@@ -2295,7 +2221,7 @@ fn heap_group(cx: &mut SelectCx<'_>, tex: Value, m: &mut Meter) -> Result<u32, E
 /// class is, else [`HEAP_CLASS_CENSUS`]; with the module's table of heap texel classes
 /// ([`heap_classes_words`]) under [`HEAP_CLASS_CENSUS`] where a sample reads it. And the words of
 /// the `half` conversion routine (`half`), the census's for [`half::CENSUS_NAME`], where a slot
-/// takes it, and the `float` one's (`float_texel`).
+/// takes it.
 pub fn routine_words(
     texture: &TexturePlan,
     access: &crate::lower::access::AccessPlan,
@@ -2312,14 +2238,12 @@ pub fn routine_words(
     let classes = access
         .heap_class
         .then(|| (HEAP_CLASS_CENSUS, heap_classes_words()));
-    // The `half` conversion routine, once per module that defines it, and the `float` one.
+    // The `half` conversion routine, once per module that defines it.
     let half = texture
         .slots
         .values()
         .any(|s| s.half_format)
         .then_some((half::CENSUS_NAME, half::ROUTINE_WORDS));
-    let float = (texture.heap_float || texture.slots.values().any(|s| s.float_format))
-        .then_some((float_texel::CENSUS_NAME, float_texel::ROUTINE_WORDS));
     // The heap's raw decode, once per result type.
     let raw = (!texture.heap_raw.is_empty()).then(|| {
         (
@@ -2331,7 +2255,6 @@ pub fn routine_words(
         .into_iter()
         .chain(classes)
         .chain(half)
-        .chain(float)
         .chain(raw)
 }
 
@@ -3297,15 +3220,14 @@ fn select_read_as(
             image,
             shape,
             (OneTexel::Always, None),
-            device_texels(cx, false),
+            device_texels(cx),
             m,
         )?;
         half_texel_nans(cx, image, shape, m)?;
     }
-    let float_texel = texel.conv == TexelConv::F32
-        && !exact
-        && extended.is_none()
-        && float_texels(cx, image, shape, OneTexel::Always, device_texels(cx, false))?;
+    if texel.conv == TexelConv::F32 && !exact && extended.is_none() {
+        float_texel_notes(cx, image, shape, OneTexel::Always);
+    }
     // A float read of a sampled heap group of one sample decodes a member of a form a heap reads
     // where its handle names one, from the group's unsigned integer class.
     let heap_raw = match image {
@@ -3380,7 +3302,6 @@ fn select_read_as(
         extended,
         heap_raw,
         heap_alpha_red,
-        float_texel,
         constant_lanes,
         declared,
         heap_class: as_class,

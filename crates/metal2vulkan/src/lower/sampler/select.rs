@@ -2392,7 +2392,7 @@ fn select_one(
         || fetched.as_ref().is_some_and(|p| p.image.slot().is_some());
     // Where a sample's `half` texel is the device's, no conversion declares the slot's class: the
     // emulation that reads it declares it itself.
-    let device = crate::lower::texture::device_texels(cx, true);
+    let device = crate::lower::texture::device_texels(cx);
     if by_format && !raw && half && device {
         crate::lower::texture::texel_format_spec(cx, image)?;
     }
@@ -2424,29 +2424,30 @@ fn select_one(
         }
         _ => {}
     }
-    // A `float` texel that may be one texel's converts by the bound format's class: not an sRGB raw
-    // texel's (decoded exactly), a bicubic sample's, or an LOD query's; nor a depth comparison's,
-    // whose result is no texel.
+    // A `float` texel that may be one texel's is the device's conversion of its codes: not an sRGB
+    // raw texel's (decoded exactly), a bicubic sample's, or an LOD query's; nor a depth
+    // comparison's, whose result is no texel.
     let comparison = matches!(
         op,
         SampleOp::Sample { dref: Some(_), .. } | SampleOp::Gather { dref: Some(_), .. }
     ) || compared.is_some();
-    let float_texel = form.is_some_and(|f| f.conv == TexelConv::F32)
+    if form.is_some_and(|f| f.conv == TexelConv::F32)
         && !raw
         && !comparison
         && !matches!(
             op,
             SampleOp::Bicubic(_) | SampleOp::Lod { .. } | SampleOp::QueryLevel { .. }
         )
-        && crate::lower::texture::float_texels(cx, image, shape, one_texel, device)?;
-    // The conversion's lanes read a runtime sampler's filter fields where its word decides: a
-    // `half` texel's on every profile, a `float` one's where it converts.
-    let half_converts = half && !raw && !matches!(op, SampleOp::Bicubic(_)) && !device;
-    let converts = half_converts || float_texel;
-    if let (crate::lower::texture::OneTexel::Word(n), true, ImageRef::Slot(_)) =
-        (one_texel, converts, image)
     {
-        if !shape.depth || float_texel {
+        crate::lower::texture::float_texel_notes(cx, image, shape, one_texel);
+    }
+    // The conversion's lanes read a runtime sampler's filter fields where its word decides: a
+    // `half` texel's on every profile.
+    let half_converts = half && !raw && !matches!(op, SampleOp::Bicubic(_)) && !device;
+    if let (crate::lower::texture::OneTexel::Word(n), true, ImageRef::Slot(_)) =
+        (one_texel, half_converts, image)
+    {
+        if !shape.depth {
             if let Some(s) = cx.families.sampler.slots.get_mut(&n) {
                 s.texels = true;
             }
@@ -2818,7 +2819,6 @@ fn select_one(
         centre_word,
         one_texel,
         half_texel: half_converts && !shape.depth,
-        float_texel,
         centre_offset,
         unmapped,
         heap_raw: None,

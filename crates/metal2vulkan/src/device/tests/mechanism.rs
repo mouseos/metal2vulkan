@@ -266,7 +266,6 @@ fn every_fact() -> Vec<RuntimeFact> {
         },
         RuntimeFact::ExactFormsOverCompilerLimit {
             sampling: true,
-            texel_conversion: false,
         },
     ]
 }

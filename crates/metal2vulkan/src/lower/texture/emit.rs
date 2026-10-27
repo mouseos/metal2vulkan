@@ -886,7 +886,7 @@ fn from_image(
     decl: &ImageDecl,
     form: TexelForm,
     x: SValue,
-    (half, float): (Option<HalfClass>, Option<FloatClass>),
+    half: Option<HalfClass>,
 ) -> BResult<SValue> {
     if r64(decl) {
         return ulong_texel(fb, x);
@@ -921,18 +921,14 @@ fn from_image(
         true => x_channel_read(fb, decl, x)?,
         false => x,
     };
-    // A `half` texel of a slot that converts by the bound format's class, and a `float` one: a
-    // read's lanes are one texel's.
-    let x = match (half, float) {
-        (Some(h), _) => {
+    // A `half` texel of a slot that converts by the bound format's class: a read's lanes are one
+    // texel's.
+    let x = match half {
+        Some(h) => {
             let lanes = TexelLanes::Texel.value(fb)?;
             h.convert(fb, x, (HalfForm::Read, lanes), TexelOrigin::Image)?
         }
-        (None, Some(f)) => {
-            let lanes = TexelLanes::Texel.value(fb)?;
-            f.convert(fb, x, lanes)?
-        }
-        (None, None) => x,
+        None => x,
     };
     let x = if form.lanes == 1 {
         fb.composite_extract(x, &[0])?
@@ -1287,79 +1283,6 @@ pub(crate) fn half_by_class(
     };
     let lanes = TexelLanes::Filtered.value(fb)?;
     super::half::convert(fb, routine, x, class, (form, lanes))
-}
-
-/// The conversion of a slot's `float` texels by the bound format's class: the module's routine and
-/// the slot's `TexelFormat` specialization constant; or of a heap color texture's by the class its
-/// handle carries, read from the handle.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct FloatClass {
-    routine: FuncId,
-    class: ClassOf,
-}
-
-impl FloatClass {
-    /// The `float` texel of image texel `x` (a `vec4` of `f32`), its lanes `lanes`
-    /// (`half::TexelLanes::code`).
-    pub(crate) fn convert(
-        self,
-        fb: &mut FunctionBuilder<'_>,
-        x: SValue,
-        lanes: SValue,
-    ) -> BResult<SValue> {
-        let class = match self.class {
-            ClassOf::Slot(c) => fb.module().const_value(c)?,
-            ClassOf::Heap(v) => v,
-        };
-        super::float_texel::convert(fb, self.routine, x, class, lanes)
-    }
-}
-
-/// How the `float` texels of a read, gather, or sample of `image` in form `texel` convert, where
-/// the access converts them (its `float_texel`): the module's routine and the slot's `TexelFormat`
-/// constant.
-pub(crate) fn float_class(
-    cx: &EmitCx<'_>,
-    image: &ImageRef,
-    texel: TexelForm,
-) -> Option<FloatClass> {
-    if texel.conv != TexelConv::F32 {
-        return None;
-    }
-    let ImageRef::Slot(index) = *image else {
-        return None;
-    };
-    let t = &cx.decl.families.texture;
-    Some(FloatClass {
-        routine: t.float_routine?,
-        class: ClassOf::Slot(t.half_format.get(&index).copied()?),
-    })
-}
-
-/// How the `float` texels of a read, gather, or sample of the heap color texture of handle
-/// `handle` convert, in form `texel`, where the access converts them (its `float_texel`): by the
-/// class the handle carries, read from it, where the module defines the routine and the class table
-/// (`TexturePlan::heap_float`), else `None`.
-pub(crate) fn heap_float_class(
-    cx: &mut EmitCx<'_>,
-    fb: &mut FunctionBuilder<'_>,
-    handle: ValueId,
-    texel: TexelForm,
-) -> BResult<Option<FloatClass>> {
-    let t = &cx.decl.families.texture;
-    let (true, Some(routine), Some(_)) = (
-        texel.conv == TexelConv::F32,
-        t.float_routine,
-        t.heap_classes,
-    ) else {
-        return Ok(None);
-    };
-    let h = cx.operand(fb, handle)?;
-    let class = super::heap_texel_class(cx, fb, h)?;
-    Ok(Some(FloatClass {
-        routine,
-        class: ClassOf::Heap(class),
-    }))
 }
 
 /// Texture slot `index`'s `TexelFormat` specialization constant, where it declares one.
@@ -3026,19 +2949,7 @@ fn read(cx: &mut EmitCx<'_>, fb: &mut FunctionBuilder<'_>, r: &Read) -> BResult<
         Some(_) => srgb_raw_texel(cx, fb, r.texel, texel, SRGB_TEXEL)?,
         None => {
             let half = half_class(cx, &r.image, r.texel);
-            let float = match (r.float_texel, r.image) {
-                (false, _) => None,
-                // A heap texture's by the class its handle carries.
-                (true, ImageRef::Heap { handle, .. }) => heap_float_class(cx, fb, handle, r.texel)?,
-                (true, image) => float_class(cx, &image, r.texel),
-            };
-            let float = match (r.float_texel, float) {
-                (true, None) => {
-                    return Err(cx.fail("a `float` read without its conversion routine"));
-                }
-                (_, float) => float,
-            };
-            from_image(cx, fb, &decl, r.texel, texel, (half, float))?
+            from_image(cx, fb, &decl, r.texel, texel, half)?
         }
     };
     // A swizzled texture's swizzle at a storage slot, on the converted texel.

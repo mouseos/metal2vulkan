@@ -161,13 +161,9 @@ pub fn storage_buffers(a: &FunctionArtifact) -> u32 {
 }
 
 /// The default policy with Metal's answers wherever a choice still offers them
-/// ([`DevicePolicy::exact_answers`]) but the texel conversions, which are the default's.
+/// ([`DevicePolicy::exact_answers`]).
 pub fn exact_maths() -> DevicePolicy {
-    let native = DevicePolicy::default();
-    DevicePolicy {
-        texel_conversion: native.texel_conversion,
-        ..native.exact_answers()
-    }
+    DevicePolicy::default().exact_answers()
 }
 
 /// A fresh per-attempt meter with the standard caps and no deadline.

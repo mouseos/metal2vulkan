@@ -912,11 +912,9 @@ pub enum PrecisionNote {
     /// ([`PrecisionNote::HalfSampleFilter`]). Recorded wherever such an access is lowered;
     /// validation derives no tolerance from it.
     ///
-    /// Native device sampling (a texel conversion): under the default
-    /// `TexelConversionPolicy::Device`, off Apple's GPUs (`VkProperty::MetalSampler` keeps the
-    /// conversion), every slot's access with a `half` result takes that rounding too, and records
-    /// this note; under `TexelConversionPolicy::Exact` a sample or gather that native device
-    /// sampling (`SamplingPolicy::NativeDevice`) answers does. The recorded bound: the device's
+    /// Native device sampling (a texel conversion): off Apple's GPUs (`VkProperty::MetalSampler`
+    /// keeps the conversion), every slot's access with a `half` result takes that rounding too,
+    /// and records this note. The recorded bound: the device's
     /// `float` texel (within [`PrecisionNote::DeviceTexelConversion`]'s bound of Metal's) rounded
     /// to nearest even is within one `half` ulp of Metal's `half` result (Metal rounds a 32-bit
     /// float sample toward zero, a half-float linear sum with ties away from zero, and a normalized
@@ -1693,9 +1691,7 @@ pub enum PrecisionNote {
     /// sum). Validation derives no tolerance from it.
     NativeFma,
     /// Native device sampling (a texel conversion): the module hands a read, sample or gather
-    /// with a `float` result the device's own conversion of the texel's codes, where Metal's is
-    /// emulated exactly: a read's under `TexelConversionPolicy::Exact`, a sample's or gather's
-    /// under it with `SamplingPolicy::Exact`. The default off Apple's GPUs
+    /// with a `float` result the device's own conversion of the texel's codes, off Apple's GPUs
     /// (`VkProperty::MetalSampler` keeps Metal's value). Recorded for every such access of a
     /// texture slot or a heap texture (not a heap's texture buffer,
     /// [`PrecisionNote::DeviceNanEncoding`]). The recorded bound, of a texel whose access reads
@@ -1709,10 +1705,9 @@ pub enum PrecisionNote {
     ///   bits; a 4-bit channel's replication is exact;
     /// - a half-float or small-float texel's NaN: the device's encoding, where Metal answers
     ///   `0x7fc00000`;
-    /// - every other class: the device's value, as under either policy.
+    /// - every other class: the device's value, which Metal's matches.
     ///
-    /// A filtered sample's value is the filter's under either policy. Validation derives no
-    /// tolerance from it.
+    /// A filtered sample's value is the filter's. Validation derives no tolerance from it.
     DeviceTexelConversion,
     /// Native half rounding (a conversion): the module rounds a `half` result it computes in
     /// `float` (a `half` operation's, a function's, a conversion from `float`'s, a texel's) by

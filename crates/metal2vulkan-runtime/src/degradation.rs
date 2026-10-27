@@ -2122,10 +2122,8 @@ degradations! {
         /// the last place of the result.
         NativeFma = "native-fma";
         /// Class: native device sampling. The device's own conversion of a texel's codes answers
-        /// the pipeline's reads, samples and gathers with a `float` result where Metal's would be
-        /// emulated (`TexelConversionPolicy::Device`, the default, on a device whose sampler is not
-        /// Metal's; `Exact` keeps Metal's for a read, and for a sample or gather under
-        /// `SamplingPolicy::Exact`). Recorded bound, of a texel whose access reads one texel of one
+        /// the pipeline's reads, samples and gathers with a `float` result, on a device whose
+        /// sampler is not Metal's. Recorded bound, of a texel whose access reads one texel of one
         /// level: an 8- or 16-bit normalized code within one `f32` ulp of Metal's `c / (2^b - 1)`
         /// where measured (lavapipe's reciprocal product); a 5- or 6-bit channel the device widens
         /// by replicating its bits within 0.18 of a code (ANV, NVIDIA; a 4-bit channel's exact); a
@@ -2604,11 +2602,9 @@ pub(crate) fn dropped_exact_forms(
     dependencies.iter().find_map(|d| match d.fact {
         metal2vulkan::pipeline::RuntimeFact::ExactFormsOverCompilerLimit {
             sampling,
-            texel_conversion,
         } => Some(
             [
                 (sampling, "exact sampling"),
-                (texel_conversion, "exact texel conversion"),
             ]
             .into_iter()
             .filter_map(|(dropped, name)| dropped.then_some(name))

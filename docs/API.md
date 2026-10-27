@@ -2997,8 +2997,7 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
 - `metal2vulkan-degrade-device-texel-conversion` (precision).
   `PrecisionNote::DeviceTexelConversion`: Native device sampling (a texel conversion): the module
   hands a read, sample or gather with a `float` result the device's own conversion of the texel's
-  codes, where Metal's is emulated exactly: a read's under `TexelConversionPolicy::Exact`, a
-  sample's or gather's under it with `SamplingPolicy::Exact`.
+  codes, off Apple's GPUs (`VkProperty::MetalSampler` keeps Metal's value).
 - `metal2vulkan-degrade-native-half-conversion` (precision). `PrecisionNote::NativeHalfConversion`:
   Native half rounding (a conversion): the module rounds a `half` result it computes in `float` (a
   `half` operation's, a function's, a conversion from `float`'s, a texel's) by the device's

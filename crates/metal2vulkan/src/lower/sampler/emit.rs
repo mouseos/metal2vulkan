@@ -3,8 +3,8 @@
 use crate::lower::emit::EmitCx;
 use crate::lower::texture::half::{HalfForm, TexelOrigin};
 use crate::lower::texture::{
-    float_class, half_class, heap_element, held_texel, live_or_zero, resident_access, sparse_spec,
-    tile_map, tiled_word, with_word, ImageRef,
+    half_class, heap_element, held_texel, live_or_zero, resident_access, sparse_spec, tile_map,
+    tiled_word, with_word, ImageRef,
 };
 use crate::spirv::builder::constructs::{ArmEnd, ArmFn, Merged};
 use crate::spirv::builder::ops::image::ArmedOffset;
@@ -2614,9 +2614,8 @@ pub(super) fn held_value(
         return crate::lower::texture::srgb_raw_texel(cx, fb, form, texel, color);
     }
     // A `half` texel of a slot converts by the bound format's class: a gather's texel as a read's,
-    // a sample's (nearest, linear, or fetched) filtered value as a sample's; a `float` texel that
-    // may be one texel's likewise. Each takes the access's lanes. Not where the sample's texel is
-    // the device's (`Sampling::half_texel`): it is held.
+    // a sample's (nearest, linear, or fetched) filtered value as a sample's, each with the access's
+    // lanes. Not where the sample's texel is the device's (`Sampling::half_texel`): it is held.
     let half = match s.source {
         Source::Combined(key) if !s.depth && s.half_texel => {
             half_class(cx, &ImageRef::Slot(key.texture), form)
@@ -2628,24 +2627,8 @@ pub(super) fn held_value(
         }
         _ => None,
     };
-    let float = match s.source {
-        Source::Combined(key) if s.float_texel => {
-            match float_class(cx, &ImageRef::Slot(key.texture), form) {
-                Some(f) => Some(f),
-                None => return Err(cx.fail("a `float` sample without its conversion routine")),
-            }
-        }
-        // A heap texture's by the class its handle carries; a depth texture's too.
-        Source::Heap { handle, .. } | Source::HeapSampler { handle, .. } if s.float_texel => {
-            match crate::lower::texture::heap_float_class(cx, fb, handle, form)? {
-                Some(f) => Some(f),
-                None => return Err(cx.fail("a `float` sample without its conversion routine")),
-            }
-        }
-        _ => None,
-    };
-    Ok(match (half, float) {
-        (Some(h), _) => {
+    Ok(match half {
+        Some(h) => {
             let access = match s.op {
                 SampleOp::Gather { .. } => HalfForm::Read,
                 _ => HalfForm::Sample,
@@ -2653,23 +2636,7 @@ pub(super) fn held_value(
             let lanes = sample_lanes(cx, fb, s)?;
             h.convert(fb, texel, (access, lanes), origin)?
         }
-        (None, Some(f)) => {
-            let lanes = sample_lanes(cx, fb, s)?;
-            // A depth sample's value is its texel's first lane (a scalar): converted as that lane
-            // of the texel, every lane of which it fills.
-            let ty = fb.value_ty(texel)?;
-            let lane = !matches!(fb.module().types().get(ty)?, SType::Vector { .. });
-            let x = if lane {
-                let four = fb.module().ty(SType::Vector { elem: ty, len: 4 })?;
-                let texel = fb.composite_construct(four, &[texel; 4])?;
-                let x = f.convert(fb, texel, lanes)?;
-                fb.composite_extract(x, &[0])?
-            } else {
-                f.convert(fb, texel, lanes)?
-            };
-            held_texel(fb, image.texel, form, x)?
-        }
-        (None, None) => held_texel(fb, image.texel, form, texel)?,
+        None => held_texel(fb, image.texel, form, texel)?,
     })
 }
 

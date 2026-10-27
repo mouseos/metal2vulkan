@@ -1049,22 +1049,12 @@ pub(super) fn emit(
         Ok(ArmEnd::FallThrough(vec![x]))
     });
     // The device's sample, which reads one texel where a runtime sampler's word states nearest
-    // filters: its `half` or `float` texel converts by the class with the sample's lanes. There a
-    // 32-bit float texel the shader fetches instead.
+    // filters: its `half` texel converts by the class with the sample's lanes. There a 32-bit
+    // float texel the shader fetches instead.
     let nearest = s
         .fetched
         .as_ref()
         .filter(|p| p.image.slot() == Some(texture));
-    let float = match s.float_texel {
-        true => match s
-            .texel
-            .and_then(|form| crate::lower::texture::float_class(cx, &ImageRef::Slot(texture), form))
-        {
-            Some(f) => Some(f),
-            None => return Err(cx.fail("a `float` sample without its conversion routine")),
-        },
-        false => None,
-    };
     let filtered: ArmFn<'_, EmitCx<'_>> = Box::new(move |fb, cx| {
         let x = match nearest {
             Some(p) => super::fetched::branch(
@@ -1094,8 +1084,8 @@ pub(super) fn emit(
             }
             false => x,
         };
-        let x = match (h, float) {
-            (Some(HalfArm::Class(h)), _) => {
+        let x = match h {
+            Some(HalfArm::Class(h)) => {
                 let lanes = super::emit::sample_lanes(cx, fb, s)?;
                 h.convert(
                     fb,
@@ -1105,7 +1095,7 @@ pub(super) fn emit(
                 )?
             }
             // The device's texel rounded to nearest even.
-            (Some(HalfArm::Device), _) => {
+            Some(HalfArm::Device) => {
                 use crate::lower::arith::legal::{FloatFmt, Form, Held};
                 let half = Form {
                     held: Held::Float(FloatFmt::Half),
@@ -1113,11 +1103,7 @@ pub(super) fn emit(
                 };
                 crate::lower::arith::narrow::round_texel(fb, half, x)?
             }
-            (None, Some(f)) => {
-                let lanes = super::emit::sample_lanes(cx, fb, s)?;
-                f.convert(fb, x, lanes)?
-            }
-            (None, None) => x,
+            None => x,
         };
         Ok(ArmEnd::FallThrough(vec![x]))
     });
