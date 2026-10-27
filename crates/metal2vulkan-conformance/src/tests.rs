@@ -1161,6 +1161,39 @@ fn a_native_note_declares_no_value_and_excuses_no_other_notice() {
     );
 }
 
+/// A native note the run did not announce is no loosening the case names: a case that names
+/// nothing and announces one other notice reads that notice as undeclared and its notices site as
+/// differing, and is not told that it loosens the site with a declaration nothing justified.
+#[test]
+fn an_unannounced_native_note_is_no_unjustified_loosening() {
+    let other = Degradation::CarriedDecodedTwin;
+    let case = WordsCase::new("words", 2);
+    let recording = recording_of(&case, case.transcript(words(&[1, 2]), "Completed", &[]), 3);
+    let mut side = StubSide::new(words(&[1, 2])).announcing(&[other]);
+    let replayed = replay_against(&case, &mut side, &recording).unwrap();
+    let Verdict::Divergent { found, .. } = &replayed.verdict else {
+        panic!("not divergent: {}", replayed.verdict);
+    };
+    assert!(
+        found
+            .iter()
+            .any(|divergence| matches!(divergence.kind, DivergenceKind::UndeclaredNotice { .. })),
+        "{found:?}"
+    );
+    assert!(
+        found
+            .iter()
+            .any(|divergence| divergence.path.starts_with("case/notices/")),
+        "the notices site differs as if nothing declared it: {found:?}"
+    );
+    assert!(
+        !found
+            .iter()
+            .any(|divergence| matches!(divergence.kind, DivergenceKind::Unjustified { .. })),
+        "{found:?}"
+    );
+}
+
 /// The standing set is closed over the native-maths class by construction: every kind whose code
 /// says it is the device's native form is in it, so a native note a later change adds cannot be
 /// left for every case to declare. Each member is a precision kind, held once.

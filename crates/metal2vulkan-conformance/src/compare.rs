@@ -282,6 +282,7 @@ pub fn compare_run(
     }
     let mut walk = Walk {
         allowances: &every,
+        named: allowances.len(),
         offered,
         stopped,
         device_gaps: &ours.device_gaps,
@@ -408,7 +409,12 @@ fn refused(metal: &Value, ours: &Value) -> bool {
 
 /// The comparison's state as it descends.
 struct Walk<'a> {
+    /// The case's own allowances, then the suite's native-note declarations
+    /// ([`crate::replay::native_note_declarations`]).
     allowances: &'a [Allowance],
+    /// How many of [`Walk::allowances`] are the case's own: only those can be a loosening the
+    /// case names and the run cannot justify.
+    named: usize,
     /// What the run and its recording offer to justify a difference.
     offered: Offered<'a>,
     /// Whether the run stopped before the end: a site only Metal reached is then no divergence.
@@ -916,15 +922,19 @@ impl Walk<'_> {
                     held = Some((at, allowance));
                     break;
                 }
-                Some(why) => {
+                // A native-note declaration the run did not announce is no loosening of the
+                // case's: the site then differs as if the declaration were absent.
+                Some(why) if at < self.named => {
                     first_unjustified = first_unjustified.or(Some((allowance, why)));
                 }
+                Some(_) => {}
             }
         }
         let Some((at, allowance)) = held else {
-            let (allowance, why) = first_unjustified.expect("a covering allowance");
-            let path = allowance.path.clone();
-            self.found.note_bad(&path, why);
+            if let Some((allowance, why)) = first_unjustified {
+                let path = allowance.path.clone();
+                self.found.note_bad(&path, why);
+            }
             return false;
         };
         self.fired[at] = true;
