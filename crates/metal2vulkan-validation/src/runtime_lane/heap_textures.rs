@@ -1501,13 +1501,14 @@ fn shared_heap_textures_are_made_or_refused_for_linear_tiling() {
             gaps.is_empty(),
             "colour textures refused as gaps: {gaps:#?}"
         );
-        // Every format whose footprint its own structure decides, Metal's `NoTexture` shape
-        // aside, answered that footprint in all four swept usages. The count comes from the
-        // product's own table rather than a number here, so a footprint that stops answering
-        // fails this instead of passing quietly as a query and a call that both refuse.
+        // Every format whose footprint its own structure decides answered that footprint in all
+        // four swept usages, the packed 10-bit pair's `NoTexture` 0 bytes at 16 among them (the
+        // arm above). The count comes from the product's own table rather than a number here, so
+        // a footprint that stops answering fails this instead of passing quietly as a query and a
+        // call that both refuse.
         let answering = PixelFormat::ALL
             .iter()
-            .filter(|&&pf| footprint(pf).is_some_and(|shape| shape != Footprint::NoTexture))
+            .filter(|&&pf| footprint(pf).is_some())
             .count();
         assert_eq!(
             no_image.len(),
