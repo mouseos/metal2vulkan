@@ -18,9 +18,10 @@
 //! the consumer's test sweeps: the blur textures' (`ShaderRead | RenderTarget |
 //! BlockWritesOnly`, `0x10005`), `ShaderRead | BlockWritesOnly` (`0x10001`), and either with
 //! `ShaderWrite` (`0x10007`, `0x7`). A blit reads every level back: every channel must hold the
-//! half written (a level not written its fill), the making may announce only the notes its
-//! kernels' stages record (the device's own answers, [`recorded`]), and the dispatch nothing.
-//! `read` then reads level 0 back through a `texture2d<half, access::read>` and
+//! half written (a level not written its fill), but for a NaN the device stores as another NaN
+//! where the dispatch announces `device-nan-encoding` (the device's write of a NaN, its native
+//! answer); the making may announce only the notes its kernels' stages record (the device's own
+//! answers, [`recorded`]), and the dispatch nothing else. `read` then reads level 0 back through a `texture2d<half, access::read>` and
 //! stores the half's bits: each must be the half stored, or the read announces
 //! `device-nan-encoding` (a read's NaN is the device's decode). The host's buffers are
 //! write-combined, which a device without unified memory places in device-local memory.
@@ -229,6 +230,11 @@ fn recorded(device: &Device, names: &[&str]) -> BTreeSet<Degradation> {
         );
     }
     kinds
+}
+
+/// Whether `h` is a NaN's half.
+fn nan(h: u16) -> bool {
+    h & 0x7c00 == 0x7c00 && h & 0x3ff != 0
 }
 
 /// Kernel `name` of [`KERNELS`] on `device`.
@@ -505,6 +511,8 @@ fn half_nans_written_through_the_blur_keep_their_bits() {
                                 written(device, (&state, kind), (format, channels), usage);
                             let dispatched = counts(&messages.take_notices());
                             let mut differ = Vec::new();
+                            // Whether every stored half that differs is a NaN stored as a NaN.
+                            let mut nans_only = true;
                             for (level, bytes) in levels.iter().enumerate() {
                                 let s = side(level as u64);
                                 for (i, t) in bytes.chunks_exact(2 * channels as usize).enumerate()
@@ -519,6 +527,7 @@ fn half_nans_written_through_the_blur_keep_their_bits() {
                                             false => stored(x, y, c, rgbx),
                                         };
                                         if got != w {
+                                            nans_only &= nan(w) && nan(got);
                                             differ.push(format!("{w:04x}->{got:04x}"));
                                         }
                                     }
@@ -548,7 +557,15 @@ fn half_nans_written_through_the_blur_keep_their_bits() {
                         read_differ.len()
                     );
                             let made_unrecorded = made.keys().any(|k| !recorded.contains(k));
-                            if !differ.is_empty() || made_unrecorded || !dispatched.is_empty() {
+                            let dispatch_kinds: Vec<_> = dispatched.keys().copied().collect();
+                            let dispatch_announced =
+                                dispatch_kinds == [Degradation::DeviceNanEncoding];
+                            let stored_unexplained =
+                                !differ.is_empty() && !(nans_only && dispatch_announced);
+                            if stored_unexplained
+                                || made_unrecorded
+                                || !(dispatch_kinds.is_empty() || dispatch_announced)
+                            {
                                 failures.push(format!(
                                     "{what}: {} stored halves differ, making announced {made:?}, \
                              dispatch {dispatched:?}",
