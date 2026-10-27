@@ -344,7 +344,7 @@ const RAGGED: &str = "a-ragged-thread-grid-observes-each-threadgroups-size-and-p
 /// Shuffles in threadgroups of 8 threads: partial simdgroups.
 const PARTIAL_SIMDGROUPS: &str = "dsm2-shuffle-past-the-thread-count-eight";
 /// Kernels of float functions and arithmetic, and one of a nearest cube sample, whose stages
-/// record precision notes (the cube's `CubeFaceReciprocal` on a device without
+/// record precision notes (the cube's `DeviceSampling` on a device without
 /// `VkProperty::MetalSampler`).
 const NOTED: [&str; 3] = [
     "anchor-three-transcendentals-where-rounding-cannot-reach",

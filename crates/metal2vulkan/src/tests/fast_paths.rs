@@ -1,14 +1,14 @@
 //! docs/FAST-PATHS.md, the ledger of the defaults that trade exactness against Metal for making
 //! time, stays accurate by construction: it names every accuracy choice of `DevicePolicy` with each
 //! of its values, as `field = Type::Value`, and every precision note a fast default, a
-//! not-yet-built accurate form, an opt-in or a listed device gap records, with its degrade code;
+//! not-yet-built accurate form or a listed device gap records, with its degrade code;
 //! and it names no policy value that no longer exists. The lists below are exhaustive matches: a
 //! field, a policy value or a precision note added to the crate fails to compile here until it is
 //! classed, and so reaches the ledger.
 
 use crate::device::{
     BatchOrderPolicy, CompletionPolicy, DevicePolicy, HeapCompressionPolicy, HostPageTexturePolicy,
-    RenderLoweringPolicy, SamplingPolicy, Unorm8LinearFilterPolicy,
+    RenderLoweringPolicy,
 };
 use crate::pipeline::PrecisionNote;
 use std::collections::BTreeSet;
@@ -58,8 +58,6 @@ fn choices() -> Vec<Choice> {
         containment: _,
         isolation: _,
         // The accuracy choices, below.
-        unorm8_linear_filter: _,
-        sampling: _,
         // The runtime's: a heap's compressed texture's image, when the host sees a command buffer
         // complete, how a batch begins after the earlier ones of its queue, where a render
         // encoder's calls are lowered, and what holds a sampled texture over host pages.
@@ -70,8 +68,6 @@ fn choices() -> Vec<Choice> {
         host_page_textures: _,
     } = p;
     vec![
-        choice!(p.unorm8_linear_filter: Unorm8LinearFilterPolicy { Exact, DeviceWithinOneCode }),
-        choice!(p.sampling: SamplingPolicy { NativeDevice, Exact }),
         choice!(p.heap_compression: HeapCompressionPolicy { Compressed, Uncompressed }),
         choice!(p.completion: CompletionPolicy { Grouped, Exact }),
         choice!(p.batch_order: BatchOrderPolicy { Ends, Exact }),
@@ -87,8 +83,6 @@ enum Ledger {
     FastDefault,
     /// The default's form where the accurate one is not built yet: a row of the first table.
     NotBuilt,
-    /// Recorded only under a non-default opt-in: the list of switches whose default is Metal's.
-    OptIn,
     /// A device gap, no speed choice: a row of the second table.
     DeviceGap,
     /// None of these: docs/API.md section 9 states it.
@@ -111,14 +105,12 @@ macro_rules! notes {
 fn notes() -> Vec<(&'static str, Ledger)> {
     notes! {
         FastDefault: [
-            DeviceSampling,
         ],
         NotBuilt: [
             ExtendedRangeBlendSource,
             ExtendedRangeFloatBlendSource,
             BicubicFilterArithmetic,
         ],
-        OptIn: [DeviceUnorm8LinearFilter],
         DeviceGap: [
             NativeTranscendentals,
             NativeDivision,
@@ -126,7 +118,6 @@ fn notes() -> Vec<(&'static str, Ledger)> {
             NativeDot,
             NativeMix,
             DeviceDenormals,
-            DeviceTexelDenormals,
             RestrictedDepthRange,
             DeviceSignedZeroInfNan,
             DeviceInterpolation,
@@ -140,6 +131,7 @@ fn notes() -> Vec<(&'static str, Ledger)> {
             HalfOutputPrecision,
             NativeHalfConversion,
             NativeHalfQuantize,
+            DeviceSampling,
             DeviceTexelConversion,
             HalfTexelConversion,
             F16FmaDoubleRounding,
@@ -163,10 +155,7 @@ fn notes() -> Vec<(&'static str, Ledger)> {
             HalfSampleFilter,
             SrgbTexelDecode,
             FloatSampleFilter,
-            DeviceGatherFootprint,
-            CubeFaceReciprocal,
             QuadsCountedBeforeDiscard,
-            DeviceDepthComparison,
             ViewBaseTexelOffset,
             DeviceColorConversion,
             QuadsSplitByClipping,
@@ -316,9 +305,8 @@ fn the_ledger_names_only_choices_the_policy_has() {
     }
 }
 
-/// The ledger names every precision note a fast default, a not-yet-built accurate form, an
-/// opt-in or a listed device gap records, each with its degrade code, which docs/API.md's
-/// catalogue lists.
+/// The ledger names every precision note a fast default, a not-yet-built accurate form or a
+/// listed device gap records, each with its degrade code, which docs/API.md's catalogue lists.
 #[test]
 fn the_ledger_names_every_note_of_its_rows_with_its_code() {
     let ledger = text("../../docs/FAST-PATHS.md");
@@ -354,23 +342,23 @@ fn the_ledger_names_every_note_of_its_rows_with_its_code() {
 #[test]
 fn the_ledger_readers_read_names_and_switches() {
     assert_eq!(code("NativeHalfConversion"), "native-half-conversion");
-    assert_eq!(
-        code("DeviceUnorm8LinearFilter"),
-        "device-unorm8-linear-filter"
-    );
+    assert_eq!(code("F16FmaDoubleRounding"), "f16-fma-double-rounding");
     assert_eq!(code("DeviceSignedZeroInfNan"), "device-signed-zero-inf-nan");
-    let text = "`sampling = SamplingPolicy::Exact` and `DevicePolicy::exact_answers()`, \
-                `CompletionPolicy::Exact`.";
+    let text = "`completion = CompletionPolicy::Exact` and `DevicePolicy::exact_answers()`, \
+                `BatchOrderPolicy::Ends`.";
     assert_eq!(
         policy_values(text),
         BTreeSet::from([
-            "SamplingPolicy::Exact".to_owned(),
-            "CompletionPolicy::Exact".to_owned()
+            "CompletionPolicy::Exact".to_owned(),
+            "BatchOrderPolicy::Ends".to_owned()
         ])
     );
     assert_eq!(
         assignments(text),
-        BTreeSet::from([("sampling".to_owned(), "SamplingPolicy::Exact".to_owned())])
+        BTreeSet::from([(
+            "completion".to_owned(),
+            "CompletionPolicy::Exact".to_owned()
+        )])
     );
 }
 

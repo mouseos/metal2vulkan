@@ -41,7 +41,6 @@ use crate::pipeline::layout::BindingSource;
 use crate::pipeline::sym::{
     Axis, PushField, ResourceKind, ResourceSlot, SlotClass, SlotRef, SpecKey, Stage,
 };
-use crate::pipeline::testing::EXACT_SAMPLING;
 use crate::pipeline::testing::{
     link_and_validate, llvm_assemble, meter, profile, typed_module_with, AssembleError,
 };
@@ -50,7 +49,7 @@ use crate::pipeline::{
 };
 use crate::spirv::interp::{run_with_images, Buffer, Config, Image, Order, Resources};
 use crate::spirv::ir::{GlobalKind, TypedModule};
-use crate::spirv::testing::committed_exact_profiles;
+use crate::spirv::testing::committed_profiles;
 
 const HEADER: &str = "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v16:16:16-v24:32:32-v32:32:32-v48:64:64-v64:64:64-v96:128:128-v128:128:128-v192:256:256-v256:256:256-v512:512:512-v1024:1024:1024-n8:16:32\"\ntarget triple = \"air64_v28-apple-macosx26.0.0\"\n\n";
 
@@ -244,11 +243,11 @@ fn twin_inputs() -> LowerInputs {
 }
 
 fn lavapipe() -> crate::device::profile::DeviceProfile {
-    profile("lavapipe", EXACT_SAMPLING).expect("profile")
+    profile("lavapipe", DevicePolicy::default()).expect("profile")
 }
 
 fn m3() -> crate::device::profile::DeviceProfile {
-    profile("moltenvk-m3", EXACT_SAMPLING).expect("profile")
+    profile("moltenvk-m3", DevicePolicy::default()).expect("profile")
 }
 
 // ---- The reference ----------------------------------------------------------------------------
@@ -1568,7 +1567,7 @@ fn the_raw_estimate_bounds_its_emission() {
             .expect("profiles")
             .into_iter()
             .map(|(stem, p)| (format!("{stem} native"), p));
-        for ((stem, p), (twin, under)) in committed_exact_profiles()
+        for ((stem, p), (twin, under)) in committed_profiles()
             .expect("profiles")
             .into_iter()
             .chain(native)
@@ -1614,7 +1613,10 @@ fn devices() -> Vec<(String, Device)> {
             .unwrap_or_default();
         let text = std::fs::read_to_string(&path).expect("profile");
         let desc = DeviceDescription::from_khronos_json(&text, None).expect("description");
-        out.push((stem, Device::new(desc, EXACT_SAMPLING).expect("device")));
+        out.push((
+            stem,
+            Device::new(desc, DevicePolicy::default()).expect("device"),
+        ));
     }
     out.sort_by(|a, b| a.0.cmp(&b.0));
     out
@@ -2273,7 +2275,7 @@ fn a_raw_view_past_the_sampler_limit_is_its_own_separate_texture() {
     let text = std::fs::read_to_string(path).expect("profile");
     let mut desc = DeviceDescription::from_khronos_json(&text, None).expect("description");
     desc.limits.max_per_stage_descriptor_samplers = 1;
-    let dev = Device::new(desc, EXACT_SAMPLING).expect("device");
+    let dev = Device::new(desc, DevicePolicy::default()).expect("device");
     let (_, m) = typed_module_with(&bc, "k", dev.profile(), &inputs(true)).expect("module");
     let (mut textures, mut samplers) = (Vec::new(), Vec::new());
     for g in m.globals() {

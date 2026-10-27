@@ -1042,40 +1042,6 @@ pub(crate) fn srgb_filtered_texel(
     }
 }
 
-/// A raw cube gather's held texel (`form`, a `half` or `float` result): the four taps' raw codes
-/// `codes` (a `vec4` of `f32`, gather order, channel `component`) decoded as [`srgb_raw_texel`]
-/// decodes a gather's, but for each lane `corner` names, the tap past both edges of its face, which
-/// takes the made-up corner `made` (the corner routine's channel, an `f32`: a color channel's step
-/// over 4095, alpha's code over 255, each correctly rounded, so that rounding `made · 4095` or
-/// `made · 255` to nearest recovers the step or code exactly).
-pub(crate) fn srgb_raw_gather(
-    cx: &mut EmitCx<'_>,
-    fb: &mut FunctionBuilder<'_>,
-    form: TexelForm,
-    (codes, component): (SValue, u32),
-    (made, corner): (SValue, [SValue; 4]),
-) -> BResult<SValue> {
-    let color = component != 3;
-    let (k, d) = srgb_raw_steps(cx, fb, codes, [color; 4])?;
-    let u = u32_ty(fb)?;
-    let vu = vec(fb, u, 4)?;
-    let grid = match color {
-        true => 4095.0,
-        false => 255.0,
-    };
-    let scale = f32s(fb, 1, grid)?;
-    let m = fb.binary(BinOp::FMul, made, scale)?;
-    let m = fb.glsl(GlslOp::RoundEven, &[m])?;
-    let m = fb.convert(ConvOp::ConvertFToU, m, u)?;
-    let mut lanes = Vec::with_capacity(4);
-    for (i, here) in (0u32..).zip(corner) {
-        let lane = fb.composite_extract(k, &[i])?;
-        lanes.push(fb.select(here, m, lane)?);
-    }
-    let k = fb.composite_construct(vu, &lanes)?;
-    srgb_ratio(fb, form, (k, d))
-}
-
 /// The steps of raw view texel `x` ([`srgb_raw_texel`]): per lane the code `c` recovered by
 /// rounding `x · 255` to nearest, a color lane's table step `k` with its grid 4095, an alpha
 /// lane's `c` with 255, as a `uvec4` of numerators and one of denominators.
@@ -1257,32 +1223,6 @@ impl HalfClass {
             rule: OperandRule::Arity,
         })
     }
-}
-
-/// The held `half` texel of image texel `x` (a `vec4` of `f32`) under access form `form`, by the
-/// bound format's class `class` (a `TexelFormat` specialization's bits as a value): the shared
-/// emulation of a switch-at-use converts its candidates' samples by the named candidate's class
-/// (SEMANTICS 1012), as [`HalfClass::convert`] converts a slot's by its constant. Its value may be
-/// filtered. Where the module defines no routine, the texel is the device's: its `half` rounded to
-/// nearest even (`narrow::round_texel`), as every access's under native device sampling.
-pub(crate) fn half_by_class(
-    cx: &mut EmitCx<'_>,
-    fb: &mut FunctionBuilder<'_>,
-    x: SValue,
-    class: SValue,
-    form: HalfForm,
-) -> BResult<SValue> {
-    let Some(routine) = cx.decl.families.texture.half_routine else {
-        let half = crate::lower::arith::legal::Form {
-            held: crate::lower::arith::legal::Held::Float(
-                crate::lower::arith::legal::FloatFmt::Half,
-            ),
-            lanes: 4,
-        };
-        return narrow::round_texel(fb, half, x);
-    };
-    let lanes = TexelLanes::Filtered.value(fb)?;
-    super::half::convert(fb, routine, x, class, (form, lanes))
 }
 
 /// Texture slot `index`'s `TexelFormat` specialization constant, where it declares one.

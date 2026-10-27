@@ -90,11 +90,12 @@ compile does. `DevicePolicy::default()` is `DevicePolicy::UNTRUSTED`:
   Each records a precision note with its bound; on MoltenVK on an Apple GPU, whose `float`
   functions are Metal's own, they are Metal's answers, but for a NaN's bits where the device is
   not measured to answer Metal's.
-- **Fast native forms off Apple's GPUs.** The device's own sampler (its filter of a two-plane
-  YCbCr texture among them). It records a precision note with its bound, and has an exact switch.
-  The device's own `half` rounding and its blend of a `half` color have none: each records its
-  note. `DevicePolicy::exact_answers()` turns on every exact form but sampling's; `sampling =
-  SamplingPolicy::Exact` emulates Metal's sampler too.
+- **Fast native forms off Apple's GPUs.** The device's own sampler (its filter, footprint, level,
+  anisotropy, texel conversion and comparison, a two-plane YCbCr texture's filter among them),
+  with no switch: the device's answer is the contract, recorded as `PrecisionNote::DeviceSampling`
+  with its measured bound. The device's own `half` rounding and its blend of a `half` color have
+  no switch either: each records its note.
+  `DevicePolicy::exact_answers()` turns on every exact form the runtime offers.
   [FAST-PATHS.md](FAST-PATHS.md) lists every choice, its bound and the measured cost of its exact
   form. On MoltenVK on an Apple GPU, whose sampler and `float` functions are Metal's own, most of
   these choices change nothing.
@@ -2083,11 +2084,10 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   record the GPU wrote while another state held the ID Metal runs that state (nothing, for a
   state of the other kind).
 - `metal2vulkan-degrade-ycbcr-filter-not-exact` (precision). `YCbCrFilterNotExact`: A pipeline
-  stage's filtered sample of a texture slot bound to a two-plane YCbCr texture does not take Metal's
-  exact filter of the format: the stage records `PrecisionNote::HalfSampleFilter` or
-  `FloatSampleFilter` under the slot's bound format (a format whose filter is not measured, a
-  swizzle that moves its channels, a linear mip filter, or a sample the emulation does not reach).
-  Cost: the texels hold Metal's reads exactly, but the sample filters them as the device does, off
+  stage's filtered sample of a texture slot bound to a two-plane YCbCr texture, through Metal's own
+  sampler (MoltenVK), does not take Metal's exact filter of the format: the stage records
+  `PrecisionNote::HalfSampleFilter` or `FloatSampleFilter` under the slot's bound format. Cost:
+  the texels hold Metal's reads exactly, but the sample filters them as the device does, off
   the grid Metal sums the format's steps on, so a filtered result can miss Metal's by a step of that
   grid or more. A device that samples natively answers the device's filter,
   `metal2vulkan-degrade-device-sampling`; on MoltenVK, Metal's own sampler
@@ -2643,25 +2643,13 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   magnification filters, on a device that samples through Metal's own sampler (MoltenVK on Apple's
   GPU): no level clamp the device's sampler takes reads Metal's `NotMipmapped` footprint at
   `maxAnisotropy` 2 to 16, so the sample filters another anisotropic footprint than Metal's.
-- `metal2vulkan-degrade-device-sample-level` (precision). `PrecisionNote::DeviceSampleLevel`: A
-  sample whose level the device's level arithmetic chooses, on a device that samples neither through
-  Metal's own sampler nor natively, of a texture other than a cube, without comparison: a fragment
-  function's implicit-level sample (its bias Metal's own reading within the device's
-  `maxSamplerLodBias`), a sample with explicit gradients, a fragment function's LOD query, and a
-  sample at an explicit level Metal's level rule is not handed on (an integer texture's, or a
-  constexpr sampler's with a level bias of its own or a clamp the rule does not take), but a
-  constant level the device reads as Metal does. The device takes the level of detail by Vulkan's
-  rules, whose scale factor may be approximated, and rounds a level its own way; Metal's level of
-  detail from derivatives is not measured. Recorded for an LOD query, and for a sample through a
-  sampler that chooses a level or a filter by it where no sample-filter note records the sample:
-  nearest filters with a nearest mip filter (a constexpr sampler's, or a runtime sampler's where its
-  word states them), or an integer texture's sampler with a mip filter or filters that differ (an
-  argument buffer's sampler always). An extended-range texture's (`BGR10_XR`, `BGRA10_XR` and their
-  sRGB twins) fragment sample at an implicit level, or with explicit gradients, records it on every
-  device: its texels are read in the shader, at Vulkan's level of detail computed there and Metal's
-  level rule, where a constexpr sampler states a mip filter or a runtime sampler's word does. The
-  sample may read another level or filter than Metal's near a boundary, and the query answers the
-  device's level.
+- `metal2vulkan-degrade-device-sample-level` (precision). `PrecisionNote::DeviceSampleLevel`: An
+  extended-range texture's (`BGR10_XR`, `BGRA10_XR` and their sRGB twins) fragment sample at an
+  implicit level, or with explicit gradients, on every device: its texels are read in the shader, at
+  Vulkan's level of detail computed there and Metal's level rule, where a constexpr sampler states a
+  mip filter or a runtime sampler's word does. The device takes the level of detail by Vulkan's
+  rules, whose scale factor may be approximated; Metal's level of detail from derivatives is not
+  measured. The sample may read another level or filter than Metal's near a boundary.
 - `metal2vulkan-degrade-unmeasured-fetch-blend` (precision). `PrecisionNote::UnmeasuredFetchBlend`:
   A fragment function reads a color attachment the pipeline blends, on a device that orders
   framebuffer fetch only through the pixel interlock (MoltenVK, RADV, ANV), of a format whose Metal
@@ -2734,11 +2722,10 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
 - `metal2vulkan-degrade-cube-gradient-footprint` (precision).
   `PrecisionNote::CubeGradientFootprint`: An explicit-gradient sample of a cube texture takes
   Metal's footprint in a form a Vulkan device reads alike, but for what is not reproduced. Cost:
-  off MoltenVK a sample the shader's emulation does not reach (a depth or comparison sample, an
-  argument buffer's texture or sampler, a runtime sampler outside its anisotropic variant) takes
-  the device's logarithm of Metal's footprint and, if anisotropic, the device's taps, so a level
-  or blend near a boundary can differ from Metal's. Where the shader takes Metal's level and taps
-  itself (`PrecisionNote::AnisotropicFilter`) this note is not recorded. On a MoltenVK release or
+  off MoltenVK the sample takes the device's logarithm of Metal's footprint and, if anisotropic,
+  the device's taps, so a level or blend near a boundary can differ from Metal's. Where the shader
+  takes Metal's level and taps itself (`PrecisionNote::AnisotropicFilter`) this note is not
+  recorded. On a MoltenVK release or
   GPU whose cube-gradient route is not measured, such an out-of-reach anisotropic sample is
   filtered isotropically, at Metal's major axis. Through MoltenVK's vertex and fragment stages
   under macOS 27, an isotropic sample is Metal's, but an anisotropic sample on a cube's `+Y` or
@@ -2752,20 +2739,16 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   nearest even, one `half` ulp from Metal's ties-away rounding at a tie.
 - `metal2vulkan-degrade-half-sample-filter` (precision). `PrecisionNote::HalfSampleFilter`: The
   module samples a texture with a `half` result through a filter (linear minification or
-  magnification, or a runtime sampler) on a device that does not sample through Metal's own sampler.
+  magnification, or a runtime sampler) that Metal's own sampler (MoltenVK) answers otherwise than
+  Metal filters the format bound there: a two-plane YCbCr texture's.
 - `metal2vulkan-degrade-srgb-texel-decode` (precision). `PrecisionNote::SrgbTexelDecode`: The module
   reads, samples, or gathers a texture with a `half` or `float` result through the device's sRGB
   decode, or decodes the device's filter of its codes, where the texture may be bound in an 8-bit
   sRGB format.
 - `metal2vulkan-degrade-float-sample-filter` (precision). `PrecisionNote::FloatSampleFilter`: The
-  module samples a texture with a `float` result through a filter on a device that does not sample
-  through Metal's own sampler.
-- `metal2vulkan-degrade-device-gather-footprint` (precision).
-  `PrecisionNote::DeviceGatherFootprint`: The module leaves a gather to the device's footprint on a
-  device that does not sample through Metal's own sampler.
-- `metal2vulkan-degrade-cube-face-reciprocal` (precision). `PrecisionNote::CubeFaceReciprocal`: The
-  module hands a nearest cube sample the centre of the texel Metal reads, on a device that does not
-  sample through Metal's own sampler.
+  module samples a texture with a `float` result through a filter that Metal's own sampler
+  (MoltenVK) answers otherwise than Metal filters the format bound there: a two-plane YCbCr
+  texture's.
 - `metal2vulkan-degrade-function-storage-assumed` (precision).
   `PrecisionNote::FunctionStorageAssumed`: A vertex or fragment function keeps more private memory
   (its `alloca`s, a call stack among them, or constants held as `Private` variables) than the floor,
@@ -2776,19 +2759,10 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   `PrecisionNote::QuadsCountedBeforeDiscard`: A fragment function runs a non-quad simdgroup
   operation (a reduction, scan, ballot, broadcast, shuffle, vote, or simdgroup matrix) before a
   discard on a path to it, in a shape where Metal's placement of it is not known.
-- `metal2vulkan-degrade-device-depth-comparison` (precision).
-  `PrecisionNote::DeviceDepthComparison`: The module leaves a depth comparison (a sample or gather
-  with comparison) to the device, on a device that does not sample through Metal's own sampler (one
-  that does, `VkProperty::MetalSampler`, compares as Metal does: the module requires it instead).
-- `metal2vulkan-degrade-device-texel-denormals` (precision). `PrecisionNote::DeviceTexelDenormals`:
-  A `float` sample or gather, a comparison's included, whose texels the device reads, on a device
-  that does not sample through Metal's own sampler.
 - `metal2vulkan-degrade-view-base-texel-offset` (precision). `PrecisionNote::ViewBaseTexelOffset`:
   The module places a texel offset on an axis that may repeat or mirror as Metal does in an access
-  of an argument buffer's texture: on a device that does not sample through Metal's own sampler (one
-  that does, `VkProperty::MetalSampler`, is Metal's texture unit itself), in a snapped gather or
-  nearest sample, fetched texels, or an emulated linear filter, and on every device in an emulated
-  raw sample (`heap_raw`).
+  of an argument buffer's texture: in an emulated raw sample (`heap_raw`) or a bicubic filter's
+  footprint.
 - `metal2vulkan-degrade-device-color-conversion` (precision).
   `PrecisionNote::DeviceColorConversion`: A fragment function writes a float to a color channel
   whose conversion the device makes where it is not measured to make Metal's: a normalized, sRGB or
@@ -2866,12 +2840,9 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   sample's depth from its vertex function's window depth read at the sample, plus `FragCoord.z` less
   that depth read at the centre, which carries the depth bias.
 - `metal2vulkan-degrade-argument-pixel-sampler-scaling` (precision).
-  `PrecisionNote::ArgumentPixelSamplerScaling`: An access through an argument buffer's sampler (not
-  a 2D gather, which snaps behind the sampler's word) whose word the specialized module cannot read
-  may hand the device a pixel coordinate scaled by the texture's size: where the sampler states
-  pixel coordinates and a linear filter or a comparison, on a device without
-  `VkProperty::MetalSampler` (a filtered sample of a class the emulation does not reach), or a
-  comparison on one with it.
+  `PrecisionNote::ArgumentPixelSamplerScaling`: A comparison through an argument buffer's sampler
+  whose word the specialized module cannot read may hand the device a pixel coordinate scaled by
+  the texture's size, where the sampler states pixel coordinates.
 - `metal2vulkan-degrade-half-output-precision` (precision). `PrecisionNote::HalfOutputPrecision`: A
   fragment function returns a `half` color output (a scalar or vector of AIR's `half`) to an
   attachment the pipeline has, and either its module is compiled without fast math
@@ -2909,25 +2880,24 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   under fast math a lane of the output that is not a load, or in a module that names no math mode.
 - `metal2vulkan-degrade-anisotropic-filter` (precision). `PrecisionNote::AnisotropicFilter`: The
   module samples a texture through an anisotropic sampler with Metal's anisotropic filter emulated
-  by the device's samples at explicit levels, on a device that does not sample through Metal's own
-  sampler (`lower::sampler::anisotropic`): a sample without comparison of a 2D texture or 2D array
-  at the fragment's implicit level or with explicit gradients, or of a cube or cube array with
-  explicit gradients, through a constexpr sampler of `maxAnisotropy` above 1, or through a runtime
-  sampler slot whose word states anisotropy (under that word alone); a cube's also through
-  MoltenVK where its cube-gradient route is not measured; and an anisotropic sampler's on a device
-  without `samplerAnisotropy` whatever its sampling, every Vulkan sampler being isotropic there,
-  each tap the device's isotropic filter (a device with the feature samples as before). Cost: a
+  by the device's samples at explicit levels (`lower::sampler::anisotropic`), on a device without
+  `samplerAnisotropy`, every Vulkan sampler being isotropic there, each tap the device's isotropic
+  filter, and for a cube's explicit gradients through MoltenVK where its cube-gradient route is not
+  measured: a sample without comparison of a 2D texture or 2D array at the fragment's implicit
+  level or with explicit gradients, or of a cube or cube array with explicit gradients, through a
+  constexpr sampler of `maxAnisotropy` above 1, or through a runtime sampler slot whose word states
+  anisotropy (under that word alone). A device with the feature samples with its own anisotropic
+  filter. Cost: a
   cube's taps step across its face by Metal's face gradients, and a tap past the face's edge reads
   the next face as the device projects it, which Metal's own is not measured against.
 - `metal2vulkan-degrade-device-anisotropic-filter` (precision).
   `PrecisionNote::DeviceAnisotropicFilter`: The module samples a texture through a sampler whose
   anisotropy is known where Metal's anisotropic filter is not emulated
-  (`PrecisionNote::AnisotropicFilter`'s reach), on a device that does not sample through Metal's own
-  sampler: a cube, a 3D texture, a comparison, a sample whose residency the function observes, or a
-  texture of another class than its declared one, at an implicit level or with explicit gradients,
-  through a constexpr sampler of `maxAnisotropy` above 1 or a runtime sampler slot whose word states
-  anisotropy (under that word alone). On a device without `samplerAnisotropy` the device filters
-  such a sample isotropically, recorded whatever the device's sampling; an argument buffer's
+  (`PrecisionNote::AnisotropicFilter`'s reach), on a device without `samplerAnisotropy`, which
+  filters it isotropically: a cube, a 3D texture, a comparison, a sample whose residency the
+  function observes, or a texture of another class than its declared one, at an implicit level or
+  with explicit gradients, through a constexpr sampler of `maxAnisotropy` above 1 or a runtime
+  sampler slot whose word states anisotropy (under that word alone). An argument buffer's
   anisotropic sampler, which the function cannot record, is refused there (`SamplerAnisotropy`).
 - `metal2vulkan-degrade-device-point-size` (precision). `PrecisionNote::DevicePointSize`: A vertex
   function writes `[[point_size]]`, or a mesh function `set_point_size`, on a device whose
@@ -2947,15 +2917,6 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   pass's outputs, where Metal writes each sample's from that sample's run: equal where every pass
   computes the same outputs. Vulkan hands an invocation under sample shading only its own sample's
   bit of the coverage.
-- `metal2vulkan-degrade-device-unorm8-linear-filter` (precision).
-  `PrecisionNote::DeviceUnorm8LinearFilter`: The module hands an 8-bit unsigned normalized texture's
-  linear sample to the device's filter, at the coordinate of Metal's footprint step
-  (`lower::sampler::native`), on a device measured to filter that class within one code of Metal
-  (`DriverDeviation::Unorm8LinearFilter`, which the module requires as
-  `VkProperty::Unorm8LinearFilter`): a sample with a `float` or `half` result of a 2D texture or 2D
-  array slot bound in `R8Unorm`, `RG8Unorm`, `RGBA8Unorm` or `BGRA8Unorm`, without comparison,
-  offset or pixel coordinates, through a constexpr sampler Metal's linear rule answers or a runtime
-  sampler slot whose word states one (under that class and word alone).
 - `metal2vulkan-degrade-half-output-fast-math-blend` (precision).
   `PrecisionNote::HalfOutputFastMathBlend`: A fragment function of a module compiled with fast math
   (`air.compile.fast_math_enable`) returns a `half` color output to an attachment the pipeline has
@@ -2971,11 +2932,11 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   (every factor, operation, write mask and blend color it builds), which Metal reads the output
   into clamped, folding none of it.
 - `metal2vulkan-degrade-device-sampling` (precision). `PrecisionNote::DeviceSampling`: Native device
-  sampling: the module hands a sample, gather or comparison to the device's own sampler where a
-  device whose sampler is not Metal's would emulate Metal's (`SamplingPolicy::NativeDevice`, the
-  default; the module requires `VkProperty::DeviceSampling`). That includes a linear sample of a two-plane YCbCr texture, whose texels hold
-  Metal's reads exactly: the device's filter of them lands within 1.183 codes (1/255) of Metal's
-  sum on the format's grid, so a draw binding such a texture makes no pipeline of its own.
+  sampling: the module hands a sample, gather or comparison to the device's own sampler on a device
+  whose sampler is not Metal's (the module requires `VkProperty::DeviceSampling`). That includes a
+  linear sample of a two-plane YCbCr texture, whose texels hold Metal's reads exactly: the device's
+  filter of them lands within 1.183 codes (1/255) of Metal's sum on the format's grid, so a draw
+  binding such a texture makes no pipeline of its own.
 - `metal2vulkan-degrade-native-transcendentals` (precision). `PrecisionNote::NativeTranscendentals`:
   Native device maths: the module computes a `float` or `half` math-library function by the device's
   own `GLSL.std.450` instruction (or Metal's composition of the device's `Exp2` and `Log2`) where

@@ -22,9 +22,9 @@ use crate::device::requirements::{VkExtension, VkProperty};
 /// The property a depth comparison the device makes requires on a device without the extension
 /// whose depth images keep values outside `[0, 1]`.
 const KEPT: VkProperty = VkProperty::DepthImageKeepsValuesOutsideUnitRange;
+use crate::device::DevicePolicy;
 use crate::pipeline::artifact::PrecisionNote;
 use crate::pipeline::interface::SlotInterface;
-use crate::pipeline::testing::EXACT_SAMPLING;
 use crate::pipeline::testing::{compile, link_and_validate, llvm_assemble, profile, AssembleError};
 
 const HEADER: &str = "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v16:16:16-v24:32:32-v32:32:32-v48:64:64-v64:64:64-v96:128:128-v128:128:128-v192:256:256-v256:256:256-v512:512:512-v1024:1024:1024-n8:16:32\"\ntarget triple = \"air64_v28-apple-macosx26.0.0\"\n\n";
@@ -187,7 +187,7 @@ fn the_extension_is_read_from_the_device_description() {
         ("intel-irisxe-anv", false),
         ("vk12-floor", false),
     ] {
-        let p = profile(stem, EXACT_SAMPLING).expect(stem);
+        let p = profile(stem, DevicePolicy::default()).expect(stem);
         assert_eq!(unrestricted(&p), listed, "{stem}");
     }
 }
@@ -205,13 +205,16 @@ fn depth_comparisons_record_the_restricted_range_without_the_extension() {
     let profiles = [
         (
             "radv",
-            profile("amd-rdna3-radv", EXACT_SAMPLING).expect("radv"),
+            profile("amd-rdna3-radv", DevicePolicy::default()).expect("radv"),
         ),
         (
             "anv",
-            profile("intel-irisxe-anv", EXACT_SAMPLING).expect("anv"),
+            profile("intel-irisxe-anv", DevicePolicy::default()).expect("anv"),
         ),
-        ("m3", profile("moltenvk-m3", EXACT_SAMPLING).expect("m3")),
+        (
+            "m3",
+            profile("moltenvk-m3", DevicePolicy::default()).expect("m3"),
+        ),
     ];
     let metal = |p: &DeviceProfile| {
         p.fields()
@@ -288,7 +291,7 @@ fn a_linear_comparison_the_shader_makes_records_no_restricted_range() {
         ("amd-rdna3-radv", false),
         ("moltenvk-m3", true),
     ] {
-        let p = profile(stem, EXACT_SAMPLING).expect(stem);
+        let p = profile(stem, DevicePolicy::default()).expect(stem);
         let a = compile(&bc, "k", &p).unwrap_or_else(|e| panic!("{stem}: compile: {e}"));
         link_and_validate(&a, &p).unwrap_or_else(|e| panic!("{stem}: L3: {e}"));
         assert!(

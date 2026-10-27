@@ -66,17 +66,6 @@ impl Drop for Scratch {
     }
 }
 
-/// The default policy with Metal's sampler emulated exactly (`SamplingPolicy::Exact`): the policy
-/// of a test of the sampler's emulation, which native device sampling, the default, skips on a
-/// device whose sampler is not Metal's. Every other answer is Metal's too
-/// (`DevicePolicy::exact_answers`): the emulation's arithmetic (its cube face reciprocal and fused
-/// multiply-adds), its texels and a read's, its `half` roundings, and its NaNs, minimum and maximum
-/// and rounding order.
-pub const EXACT_SAMPLING: DevicePolicy = DevicePolicy {
-    sampling: crate::device::SamplingPolicy::Exact,
-    ..DevicePolicy::UNTRUSTED.exact_answers()
-};
-
 /// The description of committed profile `stem` (`validation/profiles/<stem>.json`).
 pub fn description(stem: &str) -> Result<DeviceDescription, String> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))

@@ -745,7 +745,6 @@ pub enum RuntimeFact {
     /// (the runtime's `Degradation::ExactFormsOverCompilerLimit`), naming the pipeline and the forms
     /// dropped. Nothing binds it.
     ExactFormsOverCompilerLimit {
-        sampling: bool,
     },
     /// The render pipeline was compiled under `VariantKey::quad_primitive_ids`, and its fragment
     /// function reads `[[primitive_id]]` from Vulkan's `PrimitiveId` shifted right by one

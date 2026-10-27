@@ -300,7 +300,7 @@ declare void @air.write_texture_2d.{suffix}(ptr addrspace(1), <2 x i32>, {vec4},
 /// Every committed profile, and `moltenvk-m3` and `lavapipe` without robustness, whose shader
 /// checks its reads and guards its writes.
 fn profiles() -> Vec<(String, DeviceProfile)> {
-    let mut out = crate::spirv::testing::committed_exact_profiles().expect("profiles");
+    let mut out = crate::spirv::testing::committed_profiles().expect("profiles");
     let all = [
         VkFeature::RobustImageAccess,
         VkFeature::RobustImageAccess2,
@@ -705,7 +705,7 @@ fn devices() -> Vec<(String, Device)> {
         let desc = DeviceDescription::from_khronos_json(&text, None).expect("description");
         out.push((
             stem,
-            Device::new(desc, crate::pipeline::testing::EXACT_SAMPLING).expect("device"),
+            Device::new(desc, crate::device::DevicePolicy::default()).expect("device"),
         ));
     }
     out.sort_by(|a, b| a.0.cmp(&b.0));

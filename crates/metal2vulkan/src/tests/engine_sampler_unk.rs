@@ -31,15 +31,15 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::device::profile::{CubeGradientRoute, DeviceProfile};
 use crate::device::requirements::{VkFeature, VkProperty};
+use crate::device::DevicePolicy;
 use crate::device::{Device, DeviceDescription};
 use crate::error::{Error, Needs};
 use crate::library::FunctionArtifact;
-use crate::pipeline::testing::EXACT_SAMPLING;
 use crate::pipeline::testing::{
     compile, engine_dir, link_and_validate, llvm_assemble, AssembleError,
 };
 use crate::pipeline::PrecisionNote;
-use crate::spirv::testing::{committed_descriptions, committed_exact_profiles};
+use crate::spirv::testing::{committed_descriptions, committed_profiles};
 
 const OP_EXT_INST: u16 = 12;
 const OP_CONSTANT: u16 = 43;
@@ -110,7 +110,7 @@ fn unrobust(stem: &str) -> DeviceProfile {
     ] {
         desc.features.remove(&f);
     }
-    Device::new(desc, EXACT_SAMPLING)
+    Device::new(desc, DevicePolicy::default())
         .expect("device")
         .profile()
         .clone()
@@ -118,7 +118,7 @@ fn unrobust(stem: &str) -> DeviceProfile {
 
 /// Every committed profile, and `moltenvk-m3` and `lavapipe` without robustness.
 fn profiles() -> Vec<(String, DeviceProfile)> {
-    let mut out = committed_exact_profiles().expect("profiles");
+    let mut out = committed_profiles().expect("profiles");
     for stem in ["moltenvk-m3", "lavapipe"] {
         out.push((format!("{stem} unrobust"), unrobust(stem)));
     }
@@ -518,7 +518,7 @@ fn an_unmeasured_cube_gradient_route_takes_metals_footprint_in_the_shader() {
     let measured = DeviceDescription::from_khronos_json(&profile_text, None).expect("description");
     let profile = |d: DeviceDescription, taken: bool| {
         let route = DriverDeviation::CubeGradientRoute;
-        Device::with_deviation(d, EXACT_SAMPLING, route, taken)
+        Device::with_deviation(d, DevicePolicy::default(), route, taken)
             .expect("device")
             .profile()
             .clone()
@@ -589,7 +589,7 @@ fn the_graphics_cube_route_is_measured_per_macos_identity() {
     else {
         return;
     };
-    let all = committed_exact_profiles().expect("profiles");
+    let all = committed_profiles().expect("profiles");
     let of = |stem: &str| {
         all.iter()
             .find(|(s, _)| s == stem)
@@ -605,7 +605,7 @@ fn the_graphics_cube_route_is_measured_per_macos_identity() {
         .expect("moltenvk-m3");
     let mut m3_macos26 = m3_macos27.clone();
     m3_macos26.device_id = crate::device::driver_facts::APPLE_M3_MAX;
-    let m3 = Device::new(m3_macos26, EXACT_SAMPLING)
+    let m3 = Device::new(m3_macos26, DevicePolicy::default())
         .expect("device")
         .profile()
         .clone();
@@ -624,7 +624,7 @@ fn the_graphics_cube_route_is_measured_per_macos_identity() {
         (CubeGradientRoute::AppleProjected, CubeGradientRoute::Metal)
     );
     let tangents = DriverDeviation::GraphicsCubeGradientTangents;
-    let unmeasured = Device::with_deviation(m3_macos27, EXACT_SAMPLING, tangents, false)
+    let unmeasured = Device::with_deviation(m3_macos27, DevicePolicy::default(), tangents, false)
         .expect("device")
         .profile()
         .clone();
@@ -716,7 +716,7 @@ fn a_runtime_samplers_cube_gradients_take_their_footprint_by_its_word() {
     let unmeasured =
         DeviceDescription::from_khronos_json(&profile_text, None).expect("description");
     let route = crate::error::DriverDeviation::CubeGradientRoute;
-    let unmeasured = Device::with_deviation(unmeasured, EXACT_SAMPLING, route, false)
+    let unmeasured = Device::with_deviation(unmeasured, DevicePolicy::default(), route, false)
         .expect("device")
         .profile()
         .clone();

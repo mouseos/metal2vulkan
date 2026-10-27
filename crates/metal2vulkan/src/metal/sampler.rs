@@ -461,13 +461,9 @@ pub fn vk_sampler(
 /// (`anisotropyEnable`, its `max_anisotropy` set).
 ///
 /// Anisotropy is a quality bound in both APIs; Vulkan requires it within the limit. It is a
-/// filter, so an integer texture has none. Off Metal's own sampler a sampler with a nearest min or
-/// mag filter is handed none: Vulkan leaves the anisotropic scheme to the implementation, and
-/// ANV's turns a nearest filter into its anisotropic one, which filters linearly even at an
-/// explicit level, where Metal's anisotropic filter takes nearest taps (18 codes
-/// off on average); the emulation's taps, which are Metal's anisotropy there, read each level
-/// through the sampler's own nearest filter. A device that samples natively filters it too: no
-/// emulation's taps read it there. A use with explicit cube gradients in the isotropic form
+/// filter, so an integer texture has none. A sampler with a nearest min or mag filter is handed
+/// its degree too: Vulkan leaves the anisotropic scheme to the implementation (ANV's filters a
+/// nearest one linearly). A use with explicit cube gradients in the isotropic form
 /// ([`SamplerUse::cube_gradient`]) is handed none, and so is every sampler on a device without
 /// `samplerAnisotropy`, where the emulation's taps read the isotropic sampler
 /// (`VUID-VkSamplerCreateInfo-anisotropyEnable-01070`: "If the samplerAnisotropy feature is not
@@ -477,11 +473,8 @@ pub(crate) fn device_anisotropy(
     use_: SamplerUse,
     profile: &DeviceProfile,
 ) -> bool {
-    let nearest = desc.min_filter == SamplerMinMagFilter::Nearest
-        || desc.mag_filter == SamplerMinMagFilter::Nearest;
     desc.max_anisotropy > 1
         && profile.fields().images.sampler_anisotropy
-        && (profile.device_samples() || !nearest)
         && !use_.cube_gradient
         && !use_.integer_texture
 }
@@ -1474,48 +1467,45 @@ mod tests {
         }
     }
 
-    /// Off Metal's own sampler a sampler with a nearest min or mag filter is handed no anisotropy
-    /// where the module emulates Metal's sampler (ANV's anisotropic scheme filters a nearest one
-    /// linearly); through Metal's sampler, natively, and with linear filters, the degree is handed
-    /// as before.
+    /// A sampler with a nearest min or mag filter is handed its degree, through Metal's sampler and
+    /// natively alike, as one with linear filters is.
     #[test]
-    fn a_nearest_filter_is_handed_no_anisotropy_off_metals_sampler() {
-        use crate::device::SamplingPolicy::{Exact, NativeDevice};
+    fn a_nearest_filter_is_handed_its_anisotropy() {
         use SamplerMinMagFilter::{Linear, Nearest};
-        let with = |metal_sampler: bool, sampling| {
+        let with = |metal_sampler: bool| {
             let (_, mut desc) = committed_descriptions()
                 .into_iter()
                 .find(|(s, _)| s == "vk12-floor")
                 .unwrap();
             desc.features.insert(VkFeature::SamplerAnisotropy);
             desc.limits.max_sampler_anisotropy_bits = 16f32.to_bits();
-            let policy = DevicePolicy {
-                sampling,
-                ..DevicePolicy::default()
-            };
-            Device::with_deviation(desc, policy, DriverDeviation::MetalSampler, metal_sampler)
-                .unwrap()
+            Device::with_deviation(
+                desc,
+                DevicePolicy::default(),
+                DriverDeviation::MetalSampler,
+                metal_sampler,
+            )
+            .unwrap()
         };
-        for (metal_sampler, sampling, min, mag, handed) in [
-            (false, Exact, Linear, Linear, Some(8.0)),
-            (false, Exact, Nearest, Nearest, None),
-            (false, Exact, Nearest, Linear, None),
-            (false, Exact, Linear, Nearest, None),
-            (false, NativeDevice, Nearest, Nearest, Some(8.0)),
-            (false, NativeDevice, Linear, Nearest, Some(8.0)),
-            (true, Exact, Nearest, Nearest, Some(8.0)),
-            (true, Exact, Linear, Nearest, Some(8.0)),
-        ] {
-            let dev = with(metal_sampler, sampling);
-            let mut d = metal_default();
-            d.min_filter = min;
-            d.mag_filter = mag;
-            d.max_anisotropy = 5;
-            let s = vk_sampler(&d, SamplerUse::default(), dev.profile()).unwrap();
-            assert_eq!(
-                s.max_anisotropy, handed,
-                "{min:?} {mag:?}, Metal's sampler {metal_sampler}"
-            );
+        for metal_sampler in [false, true] {
+            let dev = with(metal_sampler);
+            for (min, mag) in [
+                (Linear, Linear),
+                (Nearest, Nearest),
+                (Nearest, Linear),
+                (Linear, Nearest),
+            ] {
+                let mut d = metal_default();
+                d.min_filter = min;
+                d.mag_filter = mag;
+                d.max_anisotropy = 5;
+                let s = vk_sampler(&d, SamplerUse::default(), dev.profile()).unwrap();
+                assert_eq!(
+                    s.max_anisotropy,
+                    Some(8.0),
+                    "{min:?} {mag:?}, Metal's sampler {metal_sampler}"
+                );
+            }
         }
     }
 

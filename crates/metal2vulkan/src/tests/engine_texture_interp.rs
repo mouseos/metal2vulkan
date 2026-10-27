@@ -56,7 +56,7 @@ fn without(stem: &str, drop: &[VkFeature]) -> DeviceProfile {
     for f in drop {
         desc.features.remove(f);
     }
-    Device::new(desc, crate::pipeline::testing::EXACT_SAMPLING)
+    Device::new(desc, crate::device::DevicePolicy::default())
         .expect("device")
         .profile()
         .clone()
@@ -64,7 +64,7 @@ fn without(stem: &str, drop: &[VkFeature]) -> DeviceProfile {
 
 /// Every committed profile, and two without any robustness (so the shader contains itself).
 fn profiles() -> Vec<(String, DeviceProfile)> {
-    let mut out = crate::spirv::testing::committed_exact_profiles().expect("profiles");
+    let mut out = crate::spirv::testing::committed_profiles().expect("profiles");
     let all = [
         VkFeature::RobustImageAccess,
         VkFeature::RobustImageAccess2,

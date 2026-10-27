@@ -2059,12 +2059,8 @@ degradations! {
         HalfSampleFilter = "half-sample-filter";
         SrgbTexelDecode = "srgb-texel-decode";
         FloatSampleFilter = "float-sample-filter";
-        DeviceGatherFootprint = "device-gather-footprint";
-        CubeFaceReciprocal = "cube-face-reciprocal";
         FunctionStorageAssumed = "function-storage-assumed";
         QuadsCountedBeforeDiscard = "quads-counted-before-discard";
-        DeviceDepthComparison = "device-depth-comparison";
-        DeviceTexelDenormals = "device-texel-denormals";
         ViewBaseTexelOffset = "view-base-texel-offset";
         DeviceColorConversion = "device-color-conversion";
         DeviceInterpolation = "device-interpolation";
@@ -2086,14 +2082,11 @@ degradations! {
         DevicePointSize = "device-point-size";
         ClippedCoverageSplit = "clipped-coverage-split";
         LoopedSampleOutputs = "looped-sample-outputs";
-        DeviceUnorm8LinearFilter = "device-unorm8-linear-filter";
         HalfOutputFastMathBlend = "half-output-fast-math-blend";
         /// Class: native device sampling. The device's own sampler answers the pipeline's
-        /// samples, gathers and comparisons where Metal's would be emulated
-        /// (`SamplingPolicy::NativeDevice`, the default on a device whose sampler is not Metal's;
-        /// `SamplingPolicy::Exact` keeps Metal's). Recorded bound, measured against an Apple M4
-        /// on 2D textures of one level in seven formats under four address modes: a linear
-        /// filter within 0.919 of a code (1/255) of Metal's on NVIDIA's 615.71.09, 0.548 on RADV,
+        /// samples, gathers and comparisons on a device whose sampler is not Metal's. Recorded
+        /// bound, measured against an Apple M4 on 2D textures of one level in seven formats
+        /// under four address modes: a linear filter within 0.919 of a code (1/255) of Metal's on NVIDIA's 615.71.09, 0.548 on RADV,
         /// 0.918 on ANV and 1.0 on lavapipe (Mesa 26.2.4); an sRGB texture's within 1.832, 0.764,
         /// 0.912 and 0.781; a nearest sample's texel the neighbour of Metal's at 0.1% of the
         /// probe's coordinates on NVIDIA and ANV, 0.02% on RADV and none on lavapipe. Level
@@ -2600,10 +2593,8 @@ pub(crate) fn dropped_exact_forms(
 ) -> Option<Vec<&'static str>> {
     dependencies.iter().find_map(|d| match d.fact {
         metal2vulkan::pipeline::RuntimeFact::ExactFormsOverCompilerLimit {
-            sampling,
         } => Some(
             [
-                (sampling, "exact sampling"),
             ]
             .into_iter()
             .filter_map(|(dropped, name)| dropped.then_some(name))

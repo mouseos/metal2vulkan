@@ -23,6 +23,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::device::profile::DeviceProfile;
 use crate::device::requirements::{VkFeature, VkLimit, VkProperty};
+use crate::device::DevicePolicy;
 use crate::device::{Device, DeviceDescription};
 use crate::error::{Capability, Error, Feature, LowerFamily, Needs, Unsupported};
 use crate::library::FunctionArtifact;
@@ -33,11 +34,10 @@ use crate::pipeline::interface::{NumberedSampler, SlotInterface};
 use crate::pipeline::layout::BindingSource;
 use crate::pipeline::link::{link, LinkInputs};
 use crate::pipeline::sym::{ResourceKind, SamplerRef, SlotClass, SlotRef, SpecKey, Stage};
-use crate::pipeline::testing::EXACT_SAMPLING;
 use crate::pipeline::testing::{
     compile, engine_dir, link_and_validate, llvm_assemble, profile, AssembleError,
 };
-use crate::spirv::testing::committed_exact_profiles;
+use crate::spirv::testing::committed_profiles;
 
 const DATALAYOUT: &str = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v16:16:16-v24:32:32-v32:32:32-v48:64:64-v64:64:64-v96:128:128-v128:128:128-v192:256:256-v256:256:256-v512:512:512-v1024:1024:1024-n8:16:32";
 
@@ -91,7 +91,7 @@ fn assemble(name: &str, body: &str) -> Option<Vec<u8>> {
 }
 
 fn m3() -> DeviceProfile {
-    profile("moltenvk-m3", EXACT_SAMPLING).expect("profile")
+    profile("moltenvk-m3", DevicePolicy::default()).expect("profile")
 }
 
 fn ok(bc: &[u8], entry: &str, p: &DeviceProfile) -> std::sync::Arc<FunctionArtifact> {
@@ -224,7 +224,7 @@ fn every_sampling_entry_compiles_or_refuses_on_every_profile() {
     let Some(bc) = fixture() else {
         return;
     };
-    for (stem, p) in committed_exact_profiles().expect("profiles") {
+    for (stem, p) in committed_profiles().expect("profiles") {
         for entry in ENTRIES {
             match compile(&bc, entry, &p) {
                 Ok(a) => {
@@ -309,7 +309,7 @@ fn a_runtime_sampler_reads_its_linear_state_by_specialization() {
         return;
     };
     let s = slot(Stage::Kernel, SlotClass::Sampler, 0);
-    for (stem, p) in committed_exact_profiles().expect("profiles") {
+    for (stem, p) in committed_profiles().expect("profiles") {
         let a = ok(&bc, "sample_level", &p);
         let fields = sampler_fields(&a, s);
         // A device sampling through Metal's own sampler filters every sample.
@@ -372,7 +372,7 @@ fn a_runtime_samples_level_reads_its_word_by_specialization() {
         let Some(bc) = assemble(name, &text) else {
             return;
         };
-        for (stem, p) in committed_exact_profiles().expect("profiles") {
+        for (stem, p) in committed_profiles().expect("profiles") {
             let a = ok(&bc, "k", &p);
             let fields = sampler_fields(&a, s).unwrap_or(0);
             if p.fields()
@@ -420,7 +420,7 @@ fn a_runtime_nearest_sample_reads_its_snap_by_specialization() {
     };
     let s = slot(Stage::Kernel, SlotClass::Sampler, 0);
     let (mut snapped, mut metal) = (0, 0);
-    for (stem, p) in committed_exact_profiles().expect("profiles") {
+    for (stem, p) in committed_profiles().expect("profiles") {
         let a = ok(&bc, "sample_level", &p);
         let fields = sampler_fields(&a, s).unwrap_or(0);
         if p.fields()
@@ -588,7 +588,7 @@ fn a_constexpr_pixel_sampler_with_a_compare_function_is_refused() {
         return;
     };
     ok(&normalized, "k", &m3());
-    for (stem, p) in &committed_exact_profiles().expect("profiles") {
+    for (stem, p) in &committed_profiles().expect("profiles") {
         match compile(&pixels, "k", p) {
             Err(Error::Unsupported(u)) => assert_eq!(
                 (u.feature, u.needs),
@@ -639,7 +639,7 @@ fn a_constexpr_reduction_compiles_as_the_weighted_average() {
             let Some(bc) = assemble(name, &kernel(reduction)) else {
                 return;
             };
-            for (stem, p) in &committed_exact_profiles().expect("profiles") {
+            for (stem, p) in &committed_profiles().expect("profiles") {
                 match (compile(&average, "k", p), compile(&bc, "k", p)) {
                     (Ok(a), Ok(b)) => {
                         let at = format!("{name} {reduction} on {stem}");
@@ -1145,7 +1145,7 @@ fn dynamic_offsets_are_offset_operands_of_their_low_four_bits() {
     let Some(bc) = assemble("gather_dynamic_offset", &dynamic_offset_kernel(true)) else {
         return;
     };
-    let lavapipe = profile("lavapipe", EXACT_SAMPLING).expect("profile");
+    let lavapipe = profile("lavapipe", DevicePolicy::default()).expect("profile");
     let a = ok(&bc, "k", &lavapipe);
     assert_eq!(operand_masks(&a, OP_IMAGE_GATHER, 6), [MASK_OFFSET]);
     assert_eq!(sign_extracts(&a), 2);
@@ -1159,7 +1159,7 @@ fn dynamic_offsets_are_offset_operands_of_their_low_four_bits() {
         .features
         .contains(&VkFeature::ShaderImageGatherExtended));
     assert!(!a.requirements.features.contains(&VkFeature::Maintenance8));
-    let floor = profile("vk12-floor", EXACT_SAMPLING).expect("profile");
+    let floor = profile("vk12-floor", DevicePolicy::default()).expect("profile");
     let a = ok(&bc, "k", &floor);
     assert_eq!(count(&a, OP_SWITCH), 1);
     assert_eq!(
@@ -1193,7 +1193,7 @@ fn m3_with(edit: impl FnOnce(&mut crate::device::profile::Limits)) -> DeviceProf
     let text = std::fs::read_to_string(path).expect("profile");
     let mut desc = DeviceDescription::from_khronos_json(&text, None).expect("description");
     edit(&mut desc.limits);
-    Device::new(desc, EXACT_SAMPLING)
+    Device::new(desc, DevicePolicy::default())
         .expect("device")
         .profile()
         .clone()

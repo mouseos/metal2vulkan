@@ -18,6 +18,7 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::device::profile::DeviceProfile;
+use crate::device::DevicePolicy;
 use crate::lower::select::Plan;
 use crate::metal::bicubic::BicubicTexels;
 use crate::metal::texel_format::texel_format;
@@ -26,7 +27,6 @@ use crate::pipeline::interface::PushLoc;
 use crate::pipeline::sym::{
     Axis, PushField, ResourceKind, ResourceSlot, SlotClass, SlotRef, SpecKey, Stage,
 };
-use crate::pipeline::testing::EXACT_SAMPLING;
 use crate::pipeline::testing::{
     compile, link_and_validate, llvm_assemble, profile, typed_module, AssembleError,
 };
@@ -60,7 +60,7 @@ fn assemble(name: &str, body: &str) -> Option<Vec<u8>> {
 }
 
 fn lavapipe() -> DeviceProfile {
-    profile("lavapipe", EXACT_SAMPLING).expect("profile")
+    profile("lavapipe", DevicePolicy::default()).expect("profile")
 }
 
 const EDGE: u64 = 1;
@@ -535,7 +535,7 @@ fn the_shared_estimate_bounds_its_emission() {
     use crate::lower::select::LowerInputs;
     use crate::pipeline::compile::{compile_bitcode, plan_bitcode, EntryRef};
     use crate::pipeline::testing::meter;
-    let profiles = crate::spirv::testing::committed_exact_profiles().expect("profiles");
+    let profiles = crate::spirv::testing::committed_profiles().expect("profiles");
     let nearest = Form {
         name: "nearest repeat",
         op: Op::Sample,

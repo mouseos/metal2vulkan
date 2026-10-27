@@ -133,12 +133,12 @@ pub(crate) use absent::absent_arm;
 pub use absent::ABSENT_ARM;
 pub use atomic::TexAtomic;
 pub(crate) use emit::{
-    constant_lanes, constant_lanes_by, dispatch, extended_table, half_by_class, half_class,
-    heap_element, heap_half_class, heap_raw_form, heap_raw_image, live_or_zero, reinterpret,
-    resident_access, rgb9e5_word, slot_image, sparse_spec, srgb_filtered_texel, srgb_raw_gather,
-    srgb_raw_tap, srgb_raw_texel, swizzled_float, swizzled_gather, swizzled_held,
-    texel_format_const, tile_map, tiled_word, with_word, HalfClass, NullLeaf, TileLevel,
-    RGB9E5_WORDS, SRGB_FILTERED_WORDS, SRGB_RAW_WORDS, SRGB_TAP_WORDS, SRGB_TEXEL,
+    constant_lanes, constant_lanes_by, dispatch, extended_table, half_class, heap_element,
+    heap_half_class, heap_raw_form, heap_raw_image, live_or_zero, reinterpret, resident_access,
+    rgb9e5_word, slot_image, sparse_spec, srgb_filtered_texel, srgb_raw_tap, srgb_raw_texel,
+    swizzled_float, swizzled_gather, swizzled_held, texel_format_const, tile_map, tiled_word,
+    with_word, NullLeaf, TileLevel, RGB9E5_WORDS, SRGB_FILTERED_WORDS, SRGB_RAW_WORDS,
+    SRGB_TAP_WORDS, SRGB_TEXEL,
 };
 pub use emit::{emit, held_texel, to_image};
 pub(crate) use slot::depth_comparison;
@@ -697,9 +697,9 @@ impl Switch {
         };
         // The shared form (SEMANTICS 1012): the emulation once, and per arm its image's reads.
         if let Some(arms) = self.shared() {
-            let (once, per_arm) = arms.first().map_or((0, 0), |(_, s)| {
-                (s.words() + s.routed_words(), s.shared_arm_words())
-            });
+            let (once, per_arm) = arms
+                .first()
+                .map_or((0, 0), |(_, s)| (s.words(), s.shared_arm_words()));
             return once
                 .saturating_add(per_arm.saturating_mul(arms.len() as u32))
                 .saturating_add(crate::lower::sampler::SHARED_WORDS)
@@ -733,22 +733,15 @@ impl FamilyStrategy for TextureStrategy {
 impl TextureStrategy {
     /// The sampled images of combined bindings this strategy makes: its own sampling's, or its
     /// switch's arms' (each the static sampling of one binding). Under the separate form each is
-    /// made from the separate texture and sampler. A sampling makes one in its open block, and
-    /// Metal's emulated linear filter one more in each block that reads the binding: the
-    /// emulation's and the device's sample's, or the raw emulation's alone; an emulated cube
-    /// gather's device arm one more, where it has one; a plain fetch one in each arm of its branch,
-    /// the fetch's and the device's access's. A switch that emulates once ([`Switch::shared`],
+    /// made from the separate texture and sampler. A sampling makes one in its open block, and a
+    /// plain fetch one in each arm of its branch, the fetch's and the device's access's. A switch that emulates once ([`Switch::shared`],
     /// SEMANTICS 1012) makes them only for its arms' device accesses
     /// ([`Sampling::shared_sampled_images`]).
     pub fn combined_samplings(&self) -> u32 {
         match self {
             TextureStrategy::Sampling(s) => match s.source {
                 crate::lower::sampler::Source::Combined(_) => {
-                    1 + s.linear.as_ref().map_or(0, |l| if l.raw { 1 } else { 2 })
-                        + s.cube_gather
-                            .as_ref()
-                            .map_or(0, |g| u32::from(!g.raw && !g.integer))
-                        + 2 * u32::from(s.fetched.is_some())
+                    1 + 2 * u32::from(s.fetched.is_some())
                 }
                 _ => 0,
             },
@@ -1802,28 +1795,21 @@ pub(crate) enum SrgbReach {
     Device,
     /// From the raw codes alone, decoded or summed exactly as Metal does.
     Raw,
-    /// From the raw codes where a runtime sampler's word states a sampler its emulation reaches,
-    /// through the device's decode elsewhere (a runtime sampler's linear emulation): the caller
-    /// notes the device's decode where the word does not reach it.
-    Word,
 }
 
 /// A read, sample, or gather of `image` (shape `shape`) with a `half` or `float` result, which
 /// an 8-bit sRGB format bound to it would decode (`metal::texel_format`). `reach` says where the
 /// module can answer as Metal does from the raw codes: a read, a nearest sample, a pixel-coordinate
 /// fetch, and a gather with a `half` result decode the code through Metal's twelve-bit table, and a
-/// bicubic sample and an emulated linear sample sum the table steps exactly (the exact routines'
-/// `BicubicTexels::SRGB` grids), a runtime sampler's where its word reaches the emulation
-/// ([`SrgbReach::Word`]); the caller decides. On a sampled color texture slot (not a texture
+/// bicubic sample sums the table steps exactly (the exact routines' `BicubicTexels::SRGB` grids);
+/// the caller decides. On a sampled color texture slot (not a texture
 /// buffer, a depth texture, or a storage slot) the module records `RuntimeFact::SrgbTexture`, and
 /// where the slot is one of `LoweringInputs::srgb_textures` (its variant: bound in such a format)
 /// an access the raw codes serve reads them, returning `true` and declaring Metal's table
 /// (`arith::srgb`, shared with `air.unpack`'s `unorm4x8_srgb`, whose census name it is charged to),
 /// and any other access keeps the device's decode, recording `PrecisionNote::SrgbTexelDecode` and
 /// `RuntimeFact::SrgbDeviceDecode` (a device that cannot sample the bound format has no view to
-/// decode it through, so the planner refuses the texture there). An access served by the raw codes
-/// where a word reaches it records the fact too, for its device arm, and leaves the note to the
-/// caller. A heap element's format is not known, so a heap element's access records the note. On a
+/// decode it through, so the planner refuses the texture there). A heap element's format is not known, so a heap element's access records the note. On a
 /// device that decodes through Metal's own texture unit (`VkProperty::MetalSampler`: MoltenVK on
 /// Apple's GPU) the device's decode is Metal's, so the module requires the property there instead
 /// of the note.
@@ -1850,30 +1836,28 @@ pub(crate) fn srgb_texels(
     if !cx.inputs.srgb_textures.contains(&slot) {
         return Ok(false);
     }
-    // A form the raw codes do not serve everywhere decodes through the device's view, which a
-    // device that cannot sample the bound format does not have: under the slot's twin variant it
-    // decodes the device's filtered codes instead, through Metal's table.
-    if reach != SrgbReach::Raw {
+    // A form the raw codes do not serve decodes through the device's view, which a device that
+    // cannot sample the bound format does not have: under the slot's twin variant it decodes the
+    // device's filtered codes instead, through Metal's table.
+    let device = reach == SrgbReach::Device;
+    if device {
         cx.facts
             .insert(crate::pipeline::facts::RuntimeFact::SrgbDeviceDecode { slot });
-    }
-    let twin = reach != SrgbReach::Raw && cx.inputs.srgb_twins.contains(&slot);
-    if reach == SrgbReach::Device && !twin {
-        device_decode(cx);
-        return Ok(false);
-    }
-    if reach == SrgbReach::Device {
+        if !cx.inputs.srgb_twins.contains(&slot) {
+            device_decode(cx);
+            return Ok(false);
+        }
         cx.precision.insert(PrecisionNote::SrgbTexelDecode);
     }
     cx.families
         .arith
         .srgb
         .get_or_insert(crate::air::intrinsics::PackDir::Unpack);
-    Ok(reach != SrgbReach::Device)
+    Ok(!device)
 }
 
 /// Whether an access of `image` that keeps the device's decode of an 8-bit sRGB texture
-/// ([`srgb_texels`] with a reach other than [`SrgbReach::Raw`]) samples the bound format's UNORM
+/// ([`srgb_texels`] with [`SrgbReach::Device`]) samples the bound format's UNORM
 /// twin instead (`LoweringInputs::srgb_twins`: a format the device cannot sample), whose view reads
 /// the codes, so the access decodes the device's filtered codes through Metal's table
 /// (`texture::srgb_filtered_texel`), Metal's value exactly where the filter reads one texel.
@@ -2170,9 +2154,7 @@ fn heap_group(cx: &mut SelectCx<'_>, tex: Value, m: &mut Meter) -> Result<u32, E
 /// heap operation masks its handle to its element (an `OpBitwiseAnd`), and a read that selects the
 /// out-of-bounds alpha also tests that flag (an `OpBitwiseAnd` and an `OpINotEqual`), with their
 /// constants once; the census's for the strategy that asks for them, `texture.read_clamped.heap`
-/// where the alpha is carried, else
-/// [`DEPTH_CLASS_CENSUS`](crate::lower::sampler::compared::DEPTH_CLASS_CENSUS) where the depth
-/// class is, else [`HEAP_CLASS_CENSUS`]; with the module's table of heap texel classes
+/// where the alpha is carried, else [`HEAP_CLASS_CENSUS`]; with the module's table of heap texel classes
 /// ([`heap_classes_words`]) under [`HEAP_CLASS_CENSUS`] where a sample reads it. And the words of
 /// the `half` conversion routine (`half`), the census's for [`half::CENSUS_NAME`], where a slot
 /// takes it.
@@ -2180,12 +2162,11 @@ pub fn routine_words(
     texture: &TexturePlan,
     access: &crate::lower::access::AccessPlan,
 ) -> impl Iterator<Item = (&'static str, u64)> {
-    let flags = (access.heap_alpha || access.heap_depth || access.carries_class()).then(|| {
+    let flags = (access.heap_alpha || access.carries_class()).then(|| {
         let words = 16 + 16 * u64::from(texture.heap_uses);
-        let name = match (access.heap_alpha, access.heap_depth) {
-            (true, _) => "texture.read_clamped.heap",
-            (false, true) => crate::lower::sampler::compared::DEPTH_CLASS_CENSUS,
-            (false, false) => HEAP_CLASS_CENSUS,
+        let name = match access.heap_alpha {
+            true => "texture.read_clamped.heap",
+            false => HEAP_CLASS_CENSUS,
         };
         (name, words)
     });

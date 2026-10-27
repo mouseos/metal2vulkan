@@ -22,6 +22,7 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::device::profile::{DeviceProfile, FloatFunctions};
+use crate::device::DevicePolicy;
 use crate::error::{Error, Feature, Needs, Unsupported};
 use crate::lower::select::Plan;
 use crate::metal::bicubic::{texels, weights, BicubicTexels};
@@ -31,7 +32,6 @@ use crate::pipeline::interface::PushLoc;
 use crate::pipeline::sym::{
     Axis, PushField, ResourceKind, ResourceSlot, SlotClass, SlotRef, SpecKey, Stage,
 };
-use crate::pipeline::testing::EXACT_SAMPLING;
 use crate::pipeline::testing::{
     compile, compile_with, engine_dir, link_and_validate, llvm_assemble, profile, typed_module,
     typed_module_with, AssembleError,
@@ -71,12 +71,12 @@ fn assemble_module(name: &str, text: &str) -> Option<Vec<u8>> {
 }
 
 fn m3() -> DeviceProfile {
-    profile("moltenvk-m3", EXACT_SAMPLING).expect("profile")
+    profile("moltenvk-m3", DevicePolicy::default()).expect("profile")
 }
 
 /// A profile without Metal's own sampler, where a linear sample is the emulation.
 fn lavapipe() -> DeviceProfile {
-    profile("lavapipe", EXACT_SAMPLING).expect("profile")
+    profile("lavapipe", DevicePolicy::default()).expect("profile")
 }
 
 /// The words of `constexpr sampler(filter::bicubic, ...)` with every axis addressed by `address`
@@ -1276,7 +1276,7 @@ fn bicubic_forms_without_a_metal_reference_are_refused() {
     }
     cases.push(("lod query", lod_fragment(edge)));
     // Every committed profile: a capability one device lacks must not be what refuses the form.
-    let profiles = crate::spirv::testing::committed_exact_profiles().expect("profiles");
+    let profiles = crate::spirv::testing::committed_profiles().expect("profiles");
     for (name, text) in &cases {
         let Some(bc) = assemble(name, text) else {
             return;
@@ -1337,7 +1337,7 @@ fn a_heap_texture_through_a_bicubic_sampler_is_refused() {
         linear,
         &state("@__air_sampler_state", bicubic_words(1, false, 0)),
     );
-    let profiles = crate::spirv::testing::committed_exact_profiles().expect("profiles");
+    let profiles = crate::spirv::testing::committed_profiles().expect("profiles");
     for (name, plain, bicubic) in [
         ("sample", &text, &bicubic_sample),
         ("gather", &gather, &bicubic_gather),
@@ -1376,7 +1376,7 @@ fn the_emulation_validates_on_every_committed_profile() {
         let Some(bc) = assemble(name, &kernel(edge, form)) else {
             return;
         };
-        for (stem, p) in crate::spirv::testing::committed_exact_profiles().expect("profiles") {
+        for (stem, p) in crate::spirv::testing::committed_profiles().expect("profiles") {
             let a = compile(&bc, "k", &p).unwrap_or_else(|e| panic!("{name} on {stem}: {e}"));
             link_and_validate(&a, &p).unwrap_or_else(|e| panic!("{name} on {stem}: {e}"));
         }
@@ -1507,7 +1507,7 @@ fn the_footprint_arithmetic_is_no_contraction() {
         let Some(bc) = assemble(name, &kernel(words, Form::Plain { offset: (0, 0) })) else {
             return;
         };
-        for (stem, p) in crate::spirv::testing::committed_exact_profiles().expect("profiles") {
+        for (stem, p) in crate::spirv::testing::committed_profiles().expect("profiles") {
             let a = compile(&bc, "k", &p).unwrap_or_else(|e| panic!("{name} on {stem}: {e}"));
             let (_, spv) =
                 link_and_validate(&a, &p).unwrap_or_else(|e| panic!("{name} on {stem}: {e}"));
@@ -1551,7 +1551,7 @@ fn the_estimate_bounds_the_bicubic_fixtures() {
             eprintln!("SKIPPED: llvm-as");
             return;
         };
-        for (stem, p) in crate::spirv::testing::committed_exact_profiles().expect("profiles") {
+        for (stem, p) in crate::spirv::testing::committed_profiles().expect("profiles") {
             let what = format!("{name} on {stem}");
             let (entry, consts) = (EntryRef::Name(name), FunctionConstantValues::defaults());
             let inputs = LowerInputs::new();
@@ -1587,7 +1587,7 @@ fn a_bicubic_samples_small_level_shares_the_planes_accumulated_call() {
         }
         Err(AssembleError::Rejected(e)) => panic!("llvm-as rejected bcx_rules: {e}"),
     };
-    let p = profile("intel-irisxe-rplp-anv", EXACT_SAMPLING).expect("profile");
+    let p = profile("intel-irisxe-rplp-anv", DevicePolicy::default()).expect("profile");
     let (_, m) = typed_module(&bc, "bcx_rules", &p).expect("typed module");
     let functions = m.functions();
     let entry = functions.get(m.entry().func.index()).expect("entry");

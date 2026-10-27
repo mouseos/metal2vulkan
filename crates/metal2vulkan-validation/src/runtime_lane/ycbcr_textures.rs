@@ -29,7 +29,7 @@
 
 use super::argument_linear_samples::{self, LINEAR_EDGE};
 use super::blits::SYSTEM_MEMORY;
-use super::degrade_notices::{assert_once, counts, on_device, on_device_with};
+use super::degrade_notices::{assert_once, counts, on_device};
 use super::depth_compares::{pipeline_of, run_held, Held, Through};
 use super::host_memory::{self, host_page, Mapping};
 use super::{buffer_with, read_buffer};
@@ -38,7 +38,7 @@ use metal2vulkan::bind::{
     ycbcr_read, ycbcr_texel, ycbcr_write, SamplerDescriptor, YCbCrCodes, YCbCrMatrix, YCbCrOutput,
     YCbCrRange,
 };
-use metal2vulkan::device::{SamplingPolicy, VkProperty};
+use metal2vulkan::device::VkProperty;
 use metal2vulkan::error::{BindError, Feature, RuntimeDriverDefect};
 use metal2vulkan::metal::format::{ycbcr_format, ChromaSubsampling, YCbCrReads};
 use metal2vulkan::metal::{
@@ -52,10 +52,10 @@ use metal2vulkan::pipeline::{
 use metal2vulkan_devtools::llvm_assemble_text;
 use metal2vulkan_runtime::{
     BlitOption, Buffer, ClearColor, CommandBuffer, CommandQueue, ComputePipelineState, Deallocator,
-    Degradation, Device, DeviceOptions, Error, Invalid, IoSurfacePlane, IoSurfaceYCbCr, Library,
-    LoadAction, MappedSampling, Nil, Origin, PipelineOptions, Problem, Region,
-    RenderPassDescriptor, RenderPipelineState, ResourceOptions, RuntimeGap, SamplerState, Size,
-    StoreAction, SurfaceYCbCrMatrix, Texture, TextureDescriptor, TextureProblem,
+    Degradation, Device, Error, Invalid, IoSurfacePlane, IoSurfaceYCbCr, Library, LoadAction,
+    MappedSampling, Nil, Origin, PipelineOptions, Problem, Region, RenderPassDescriptor,
+    RenderPipelineState, ResourceOptions, RuntimeGap, SamplerState, Size, StoreAction,
+    SurfaceYCbCrMatrix, Texture, TextureDescriptor, TextureProblem,
 };
 use sha2::{Digest, Sha256};
 use std::time::Duration;
@@ -1249,10 +1249,8 @@ fn a_fragments_linear_sample_is_metals_through_each_sampler_and_result() {
 /// `1/2048`, 0.125 (`ycbcr-filter-not-exact`).
 const DEVICE_FILTER_BOUND: f32 = 0.5;
 
-/// Under native sampling (`SamplingPolicy::NativeDevice`), a fragment function's linear sample of
-/// a `YCBCR8_420_2P` texture
-/// through a runtime sampler, with a `float` and a `half` result, takes the pipeline a draw binding
-/// any other texture takes: the draw binding it makes no pipeline after the one that bound an
+/// A fragment function's linear sample of a `YCBCR8_420_2P` texture through a runtime sampler,
+/// with a `float` and a `half` result, takes the pipeline a draw binding any other texture takes: the draw binding it makes no pipeline after the one that bound an
 /// `RGBA16Float` texture of the same texels, and its samples are that texture's bit for bit (the
 /// device's filter of them), within [`DEVICE_FILTER_BOUND`] of Metal's step. On a device that
 /// samples natively the module's `device-sampling` is announced and no filter notice; on one that
@@ -1262,10 +1260,7 @@ const DEVICE_FILTER_BOUND: f32 = 0.5;
 /// no filter notice.
 #[test]
 fn a_ycbcr_slot_takes_the_devices_filter_in_the_pipeline_its_creation_made() {
-    let native = |options: &mut DeviceOptions| {
-        options.policy.sampling = SamplingPolicy::NativeDevice;
-    };
-    on_device_with(native, |device, messages| {
+    on_device(|device, messages| {
         let kernels = Kernels::new(device);
         let surface = buffer_with(device, &surface_bytes(9)).unwrap();
         let texture = ycbcr_texture(

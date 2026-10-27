@@ -264,7 +264,6 @@ fn every_fact() -> Vec<RuntimeFact> {
             payload: None,
         },
         RuntimeFact::ExactFormsOverCompilerLimit {
-            sampling: true,
         },
     ]
 }

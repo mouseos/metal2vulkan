@@ -1085,23 +1085,6 @@ impl At {
     }
 }
 
-/// The footprint of sample `s` of sampled image `si` (image facts `image`) over `taps`, the
-/// border color seen through the channels of the bound format's treatment `bits` (a
-/// [`BicubicTexels`] specialization or a `TexelFormat` one, whose bits are the same, or a heap
-/// element's class's bits), and the image its taps are fetched from.
-pub(super) fn footprint(
-    cx: &mut EmitCx<'_>,
-    fb: &mut FunctionBuilder<'_>,
-    t: &Tys,
-    s: &Sampling,
-    (si, image): (SValue, CombinedImage),
-    bits: Bits,
-    taps: &Taps<'_>,
-) -> BResult<(Footprint, SValue)> {
-    let at = At::of(cx, fb, s)?;
-    footprint_from(fb, t, &at, (si, image), bits, taps)
-}
-
 /// [`footprint`] of a sample whose plain data is `at`.
 pub(super) fn footprint_from(
     fb: &mut FunctionBuilder<'_>,

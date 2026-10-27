@@ -22,13 +22,6 @@ pub struct DevicePolicy {
     pub containment: ContainmentPolicy,
     /// Whether guest shaders are isolated from each other's resources.
     pub isolation: GuestIsolation,
-    /// Whether an 8-bit unsigned normalized texture's linear sample may be the device's own
-    /// filter on a device measured within one code of Metal; by default it is Metal's filter,
-    /// emulated exactly.
-    pub unorm8_linear_filter: Unorm8LinearFilterPolicy,
-    /// Whether a device that does not sample through Metal's own sampler samples natively (the
-    /// default) or emulates Metal's sampler exactly.
-    pub sampling: SamplingPolicy,
 
     /// Whether a heap's colour texture that Metal keeps losslessly compressed, on a driver whose
     /// compressed images hide writes through an alias, is the driver's compressed image (the
@@ -59,8 +52,7 @@ pub struct DevicePolicy {
 }
 
 impl DevicePolicy {
-    /// The untrusted-guest production policy: containment and isolation on, Metal's 8-bit linear
-    /// filter emulated exactly where the emulation runs, native device sampling, the driver's
+    /// The untrusted-guest production policy: containment and isolation on, the driver's
     /// compressed image of a heap's texture Metal keeps compressed, command buffers ready together
     /// in one kernel submission, batches of one queue ordered by their ends where the driver runs
     /// them one after another, and a sampled
@@ -70,8 +62,6 @@ impl DevicePolicy {
         handle_domain: HandleDomain::Table,
         containment: ContainmentPolicy::Contained,
         isolation: GuestIsolation::On,
-        unorm8_linear_filter: Unorm8LinearFilterPolicy::Exact,
-        sampling: SamplingPolicy::NativeDevice,
         heap_compression: HeapCompressionPolicy::Compressed,
         completion: CompletionPolicy::Grouped,
         batch_order: BatchOrderPolicy::Ends,
@@ -87,8 +77,8 @@ impl DevicePolicy {
     /// the accesses it depends on alone ([`BatchOrderPolicy::Exact`]), each render encoder
     /// call lowered inside the call, which returns every refusal
     /// ([`RenderLoweringPolicy::AtCall`]), and every texture over host pages a shadow, whose
-    /// copies touch its texels alone ([`HostPageTexturePolicy::Shadow`]). Sampling and every
-    /// other field are kept.
+    /// copies touch its texels alone ([`HostPageTexturePolicy::Shadow`]). Every other field is
+    /// kept.
     pub const fn exact_answers(self) -> DevicePolicy {
         DevicePolicy {
             heap_compression: HeapCompressionPolicy::Uncompressed,
@@ -118,49 +108,6 @@ pub enum ContainmentPolicy {
     Contained,
     /// No containment. Only valid with `GuestIsolation::Off`; recorded in the fingerprint.
     UnsafeOff,
-}
-
-/// How an 8-bit unsigned normalized texture's linear sample is filtered: a 2D texture's or 2D
-/// array's sample of a slot bound in `R8Unorm`, `RG8Unorm`, `RGBA8Unorm` or `BGRA8Unorm`, through a
-/// constexpr sampler with normalized coordinates or a runtime sampler slot, without comparison or
-/// offset.
-#[non_exhaustive]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum Unorm8LinearFilterPolicy {
-    /// Metal's filter, emulated exactly: the default (the owner's ruling of 2026-10-11; on the
-    /// consumer's fragments the device's filter bought no GPU time and cost module size and
-    /// making time).
-    #[default]
-    Exact,
-    /// The device's own filter at the centre of Metal's 1/256 footprint step, on a device
-    /// measured to filter the class within one code (1/255) of Metal
-    /// ([`DriverDeviation::Unorm8LinearFilter`](crate::error::DriverDeviation::Unorm8LinearFilter)):
-    /// such a sample records
-    /// [`PrecisionNote::DeviceUnorm8LinearFilter`](crate::pipeline::PrecisionNote::DeviceUnorm8LinearFilter)
-    /// and requires `VkProperty::Unorm8LinearFilter`. An unmeasured device keeps Metal's filter.
-    DeviceWithinOneCode,
-}
-
-/// How a device that does not sample through Metal's own sampler (MoltenVK on Apple's GPU,
-/// `DriverDeviation::MetalSampler`) answers a module's samples, gathers and comparisons: natively,
-/// its own sampler's answer (the default: the owner's ruling of 2026-10-11, making time before
-/// exactness), or Metal's sampler, emulated exactly. A device that samples through Metal's own
-/// sampler answers as Metal under either.
-#[non_exhaustive]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum SamplingPolicy {
-    /// Native device sampling: each sample, gather and comparison goes to the device's sampler
-    /// as on a device whose sampler is Metal's, with no emulation of Metal's filters, footprint,
-    /// level selection, anisotropy or comparisons in the module. Such a module records
-    /// [`PrecisionNote::DeviceSampling`](crate::pipeline::PrecisionNote::DeviceSampling), whose
-    /// docs state the bound measured against Metal, and requires `VkProperty::DeviceSampling`.
-    #[default]
-    NativeDevice,
-    /// Metal's sampler, emulated exactly where the device's differs: the module's size and the
-    /// driver's making time grow with each sample.
-    Exact,
 }
 
 /// The image of a heap's colour texture that Metal keeps losslessly compressed (with

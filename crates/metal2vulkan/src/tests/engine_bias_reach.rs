@@ -26,9 +26,9 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::device::profile::DeviceProfile;
+use crate::device::DevicePolicy;
 use crate::library::FunctionArtifact;
 use crate::pipeline::artifact::PrecisionNote;
-use crate::pipeline::testing::EXACT_SAMPLING;
 use crate::pipeline::testing::{
     compile, engine_dir, link_and_validate, llvm_assemble, profile, AssembleError,
 };
@@ -147,7 +147,7 @@ declare {{ <4 x float>, i8 }} @air.sample_texture_2d.v4f32(ptr addrspace(1), ptr
 }
 
 fn p(stem: &str) -> DeviceProfile {
-    profile(stem, EXACT_SAMPLING).expect(stem)
+    profile(stem, DevicePolicy::default()).expect(stem)
 }
 
 fn max_bias(p: &DeviceProfile) -> f32 {
