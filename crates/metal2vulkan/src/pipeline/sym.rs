@@ -374,12 +374,6 @@ pub enum SyntheticBinding {
     /// the post-tessellation vertex function reads (`lower::tessellation::work`). Declared with
     /// the vertex stage's symbols.
     TessellationRecords,
-    /// A fragment function's sRGB color table: a read-only uniform or storage buffer (as the
-    /// binding's descriptor type says) holding
-    /// [`color_write_table`](crate::bind::color_write_table)'s bytes, from which a function that
-    /// writes a float to an sRGB color attachment reads the linear value of the byte Metal
-    /// stores.
-    ColorWriteTable,
     /// The stand-in of the render pass's depth attachment a fragment function that runs the
     /// draw's depth test itself tests and writes (`GraphicsState::shader_tests`): a coherent
     /// `R32f` storage image holding pixel `(x, y)`'s depth at texel `(x, y)` (its samples as the
@@ -1144,13 +1138,6 @@ pub enum PushField {
     /// signedness, as Metal stores it (`RuntimeFact::StorageTextureIntegerChannels`, a slot whose
     /// storage choice declares no format).
     TextureIntegerChannels(SlotRef),
-    /// The rule word of the color attachment of this index for a fragment function that selects
-    /// its channels' rules at the draw (`ChannelWrite::Selected`, `StageIo::selected_colors`): one
-    /// `u32` holding each channel's code (`pipeline::color_writes::rule_word`: none, the device's
-    /// conversion, an 8-bit unorm channel's, a half-float channel's), which the pipeline's
-    /// attachment decides (`GraphicsState::color_write_rules`), so every attachment format and
-    /// blend whose channels take those rules shares one module.
-    ColorWriteRule(u32),
     /// The render encoder's blend color (`setBlendColorRed:green:blue:alpha:`) for a fragment
     /// function that blends a 16-bit float attachment in the shader under a blend that reads it
     /// (a fetched attachment's blend): one `uvec4` holding the four `f32`s' bits as the encoder

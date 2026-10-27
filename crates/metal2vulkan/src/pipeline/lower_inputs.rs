@@ -338,18 +338,19 @@ pub struct LoweringInputs {
     pub amplification_draws: Option<AmplificationDraws>,
     /// How each color attachment the fragment function writes takes each channel of its float
     /// output (red, green, blue, alpha; `None` for a channel the format lacks), where the
-    /// attachment's format converts it (a normalized, sRGB or half-float format) on a device not
-    /// measured to convert as Metal does (without `VkProperty::MetalColorWrites`): a
-    /// [`ChannelWrite`] rule where the function rounds the channel by Metal's rule and writes the
-    /// `f32` nearest the code's exact value, which the device stores as that code;
-    /// [`ChannelWrite::Device`] where the device's conversion stays (blending other than factors
-    /// one and zero, the alpha alpha-to-coverage reads, or a format whose conversion Metal was
-    /// not measured with), a near-equivalent the function records as
-    /// `PrecisionNote::DeviceColorConversion`. `Device::compile_render_pipeline` sets it for a
-    /// `Function` fragment stage from the pipeline's color attachments, blend states and
-    /// alpha-to-coverage, and a fragment compiled on its own for such a pipeline compiles under the
-    /// same map: link refuses one compiled under another as `NeedsInput(ColorWrites)`. Empty on a
-    /// device with the property and for any other function.
+    /// attachment's format converts it (a normalized, sRGB or small float format): Metal's
+    /// [`ChannelWrite`] rule where the attachment stores the output as written, which the device's
+    /// conversion stores, the function recording `PrecisionNote::DeviceColorConversion` where the
+    /// device is not measured to convert it as Metal does; [`ChannelWrite::Device`] where the
+    /// device's conversion of another value stays (blending other than factors one and zero, the
+    /// alpha alpha-to-coverage reads, or a format whose conversion Metal was not measured with),
+    /// recorded alike; and a half-float channel's rule under
+    /// `TextureWriteRoundingMode::NearestEven`, which the function rounds itself. On a device that
+    /// stores Metal's codes (`VkProperty::MetalColorWrites`) only the half-float channels.
+    /// `Device::compile_render_pipeline` sets it for a `Function` fragment stage from the
+    /// pipeline's color attachments, blend states and alpha-to-coverage, and a fragment compiled
+    /// on its own for such a pipeline compiles under the same map: link refuses one compiled under
+    /// another as `NeedsInput(ColorWrites)`. Empty for any other function.
     #[cfg_attr(feature = "serde", serde(default))]
     pub color_writes: BTreeMap<u32, [Option<ChannelWrite>; 4]>,
     /// The varyings the fragment function's mesh render pipeline's mesh function writes per
@@ -1149,15 +1150,6 @@ pub enum ChannelWrite {
         /// The channel's bits.
         bits: u8,
     },
-    /// One of the selectable rules (none, the device's conversion, an 8-bit unorm channel's, a
-    /// half-float channel's), chosen at each draw by the attachment's `PushField::ColorWriteRule`
-    /// word, which the pipeline's attachment decides (`GraphicsState::color_write_rules`): the
-    /// function computes each rule's value and selects one, so one module serves every
-    /// attachment whose channels take such rules, whatever its format or blend. Where the device
-    /// does not store Metal's codes itself, an attachment whose channels each take such a rule, one
-    /// of them a rounding (`Unorm { bits: 8 }` or a half's `FloatTowardZero`), takes `Selected` on
-    /// every channel of its entry.
-    Selected,
 }
 
 /// What a vertex function compiled for draws of one amplification each writes beyond its own

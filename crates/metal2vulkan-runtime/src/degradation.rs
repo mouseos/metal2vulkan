@@ -543,13 +543,12 @@ degradations! {
              sample planes) and writes the resolve texture, where the device would resolve in \
              the pass; where the attachment's image takes no input attachment usage, a copy of \
              its samples over the render area into a scratch image first";
-        /// A fragment function writes a float to a normalized, sRGB or half-float color
-        /// attachment on a device whose own conversion is not Metal's
-        /// (`StageModule::rounded_colors`).
+        /// A fragment function writes a float to a half-float color attachment of a pipeline
+        /// under `TextureWriteRoundingMode::NearestEven`, whose rounding no device's conversion
+        /// gives (`StageModule::rounded_colors`).
         ShaderColorConversion = "shader-color-conversion", Performance,
-            "the fragment function rounds each such channel to the code Metal stores before it \
-             writes it: about 35 more instructions per normalized or half-float channel, and \
-             about 70 and one read of a 4 KiB table per sRGB channel";
+            "the fragment function rounds each such channel to nearest even before it writes it: \
+             about 35 more instructions per channel";
         /// A fragment function writes a `half` to a half-float color attachment as the bits of
         /// the half Metal stores, through a 16-bit output, on a device that does not store a
         /// 32-bit output's NaN as Metal does (`StageModule::half_bit_colors`).
@@ -3162,8 +3161,9 @@ impl Device {
                     (
                         object(),
                         format!(
-                            "the device's conversion of a float to the format of color \
-                             attachment(s) {:?} is not Metal's near a tie between two codes",
+                            "the pipeline rounds the half-float channels of color \
+                             attachment(s) {:?} to nearest even (its texture write rounding \
+                             mode), which the device's conversion does not",
                             stage.rounded_colors
                         ),
                     )

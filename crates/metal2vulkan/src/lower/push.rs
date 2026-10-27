@@ -118,7 +118,6 @@ pub const fn shape(f: PushField) -> FieldShape {
         PushField::Specialized(_) => FieldShape::U32,
         // An in-place YCbCr texture's size, planes and conversion.
         PushField::YCbCrInPlace(_) => FieldShape::UVec4Array(2),
-        PushField::ColorWriteRule(_) => FieldShape::U32,
         // The residual is below `min{Storage,Uniform}BufferOffsetAlignment`.
         PushField::SlotBindOffset(_) | PushField::VertexBufferStride(_) => FieldShape::U32,
         // A texture's mipmap level count, an acceleration structure's instance count, the render

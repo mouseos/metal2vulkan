@@ -1494,10 +1494,10 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   the attachment's image takes no input attachment usage, a copy of its samples over the render
   area into a scratch image first.
 - `metal2vulkan-degrade-shader-color-conversion` (performance). `ShaderColorConversion`: A fragment
-  function writes a float to a normalized, sRGB or half-float color attachment on a device whose own
-  conversion is not Metal's (`StageModule::rounded_colors`). Cost: the fragment function rounds each
-  such channel to the code Metal stores before it writes it: about 35 more instructions per
-  normalized or half-float channel, and about 70 and one read of a 4 KiB table per sRGB channel.
+  function writes a float to a half-float color attachment of a pipeline under
+  `TextureWriteRoundingMode::NearestEven`, whose rounding no device's conversion gives
+  (`StageModule::rounded_colors`). Cost: the fragment function rounds each such channel to nearest
+  even before it writes it: about 35 more instructions per channel.
 - `metal2vulkan-degrade-shader-half-color-bits` (performance). `ShaderHalfColorBits`: A fragment
   function writes a `half` to a half-float color attachment as the bits of the half Metal stores,
   through a 16-bit output, on a device that does not store a 32-bit output's NaN as Metal does
@@ -2821,10 +2821,14 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   raw sample (`heap_raw`).
 - `metal2vulkan-degrade-device-color-conversion` (precision).
   `PrecisionNote::DeviceColorConversion`: A fragment function writes a float to a color channel
-  whose conversion the device makes, not Metal's rule (`ChannelWrite::Device`): an attachment that
-  blends with factors other than one and zero, the alpha of attachment 0 under alpha-to-coverage, a
-  format whose conversion Metal was not measured with (the packed 16-bit unorm formats, `A8Unorm`,
-  the packed floats).
+  whose conversion the device makes where it is not measured to make Metal's: a normalized, sRGB or
+  small float channel on a device other than MoltenVK on an Apple GPU not measured to convert that
+  kind as Metal does, an attachment that blends with factors other than one and zero
+  (`ChannelWrite::Device`), the alpha of attachment 0 under alpha-to-coverage, a format whose
+  conversion Metal was not measured with (the packed 16-bit unorm formats, `A8Unorm`, the packed
+  floats). Near a tie between two codes the device may store the other one. Also a `float` texel a
+  function writes to a storage texture that may hold a normalized or half-float format, or
+  `ARGB8Unorm`, on a device not measured to store Metal's codes.
 - `metal2vulkan-degrade-device-interpolation` (precision). `PrecisionNote::DeviceInterpolation`: A
   fragment function reads a varying the device interpolates (`center_perspective`, `centroid`,
   `sample` or `no_perspective`, not `flat`) on a device not measured to interpolate as Metal does

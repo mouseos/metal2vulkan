@@ -2490,7 +2490,7 @@ fn argb_codes(fb: &mut FunctionBuilder<'_>, form: TexelForm, x: SValue) -> BResu
         lanes: form.lanes,
     };
     let rule = Some(crate::pipeline::lower_inputs::ChannelWrite::Unorm { bits: 8 });
-    color_write::round(fb, f, x, &[rule; 4], None)
+    color_write::round(fb, f, x, &[rule; 4])
 }
 
 /// `a && b`, or `b` alone.

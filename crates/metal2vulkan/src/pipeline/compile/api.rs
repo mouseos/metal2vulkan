@@ -1578,12 +1578,6 @@ fn stage_module(c: &CompiledFunction, linked: &Linked, i: usize) -> Result<Stage
     if a.subgroup.full_subgroups {
         stage_flags |= vk::PipelineShaderStageCreateFlags::REQUIRE_FULL_SUBGROUPS;
     }
-    // A fragment function that selects an attachment's rules rounds it, and keeps the notes of
-    // the rules, as the pipeline's attachment selects them.
-    let rules = linked
-        .graphics
-        .as_ref()
-        .map_or(&[][..], |g| &g.color_write_rules[..]);
     // A `half` output of a module without fast math keeps its note where its attachment blends.
     let colors = linked
         .graphics
@@ -1594,13 +1588,8 @@ fn stage_module(c: &CompiledFunction, linked: &Linked, i: usize) -> Result<Stage
         .graphics
         .as_ref()
         .is_some_and(|g| g.alpha_to_coverage);
-    let Some((precision_notes, rounded_colors)) =
-        crate::pipeline::color_writes::pipeline_writes(a, rules, colors, coverage)
-    else {
-        return Err(invariant(
-            "link gave no rule word to a selected color attachment",
-        ));
-    };
+    let (precision_notes, rounded_colors) =
+        crate::pipeline::color_writes::pipeline_writes(a, colors, coverage);
     Ok(StageModule {
         stage: a.interface.vk_stage(),
         entry_point: ENTRY_NAME.to_owned(),

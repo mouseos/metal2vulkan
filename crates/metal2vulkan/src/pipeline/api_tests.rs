@@ -675,7 +675,6 @@ mod serde_round_trips {
                     view: crate::pipeline::graphics::StandInView::Image,
                 }),
             }),
-            color_write_rules: vec![(0, 0x3322), (2, 0x0001)],
             snapshot_reads: true,
             color_group: Some(crate::pipeline::ColorGroup {
                 present: vec![0, 5],

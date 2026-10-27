@@ -73,17 +73,12 @@ const FORMATS: [(PixelFormat, bool, usize, [Option<usize>; 4]); 5] = [
     ),
 ];
 
-/// The byte of each twelve-bit index: the largest whose first encode index (the color table's
-/// first word of each entry, `bind::color_write_table`) is at or below it.
+/// The byte of each twelve-bit index: the number of Metal's encode thresholds at or below it
+/// (`bind::SRGB_RESOLVE_THRESHOLDS`, byte `c`'s first index at `c - 1`).
 fn encode_bytes() -> Vec<u8> {
-    let first: Vec<u32> = metal2vulkan::bind::color_write_table()
-        .as_chunks::<16>()
-        .0
-        .iter()
-        .map(|e| u32::from_le_bytes([e[0], e[1], e[2], e[3]]))
-        .collect();
+    use metal2vulkan::bind::SRGB_RESOLVE_THRESHOLDS;
     (0..4096u32)
-        .map(|i| (1..256).rev().find(|&b| first[b] <= i).unwrap_or(0) as u8)
+        .map(|i| SRGB_RESOLVE_THRESHOLDS.partition_point(|&t| u32::from(t) <= i) as u8)
         .collect()
 }
 

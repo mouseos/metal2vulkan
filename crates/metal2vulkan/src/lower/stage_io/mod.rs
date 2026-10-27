@@ -406,17 +406,16 @@ pub struct StageIoPlan {
     /// interface parameter, one fetch per pulled attribute, the output stores, and the roundings of
     /// color outputs.
     pub words: u64,
-    /// How a fragment function writes the lanes of each color attachment's output it does not
-    /// leave to the device whole (`color_write`), through an output variable or in the storage
-    /// form: each rounded to the code Metal stores, or, where the device is measured to convert
-    /// it as Metal does, its NaN chosen.
-    pub rounded: BTreeMap<u32, [Option<crate::lower::arith::color_write::Lane>; 4]>,
+    /// The lanes of each color attachment's output a fragment function rounds itself
+    /// (`color_write`), through an output variable or in the storage form: each by its rule, a
+    /// half-float channel's under `TextureWriteRoundingMode::NearestEven`.
+    pub rounded: BTreeMap<u32, [Option<crate::pipeline::lower_inputs::ChannelWrite>; 4]>,
     /// The color attachments whose output the function writes as the bits of the half Metal
     /// stores, through a 16-bit output variable (`color_write::half_output`).
     pub halves: BTreeSet<u32>,
     /// The measured driver deviations, as their properties, a fragment function's color writes
-    /// rely on: channels written as computed because the device converts them as Metal does
-    /// (`color_write`). The module requires them.
+    /// rely on: channels that record no device conversion because the device converts them as
+    /// Metal does (`color_write`). The module requires them.
     pub color_properties: BTreeSet<crate::device::requirements::VkProperty>,
     /// The extended-range color attachments whose `float` or `half` output each return stores
     /// as the raw texel Metal stores (`extended_color::encode`), with the form each is held in

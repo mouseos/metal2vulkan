@@ -1834,8 +1834,6 @@ fn plan(p: &RenderPipeline, device: &Device, shape: &BindShape) -> Result<Bindin
                 PushField::DepthBias if stage == Stage::Fragment => {}
                 // The storage form's kept channels, which instantiation reads from the template.
                 PushField::StorageKeptChannels if stage == Stage::Fragment => {}
-                // An attachment's rule word, which instantiation reads from the template.
-                PushField::ColorWriteRule(_) if stage == Stage::Fragment => {}
                 // A draw of one amplification's id and offsets, which instantiation writes before
                 // each draw; the placement order puts them right after the addresses, so the window
                 // holds them.
@@ -2169,10 +2167,6 @@ fn plan(p: &RenderPipeline, device: &Device, shape: &BindShape) -> Result<Bindin
                                 ))
                             }
                         }
-                    }
-                    // The sRGB color table, the same bytes for every pipeline.
-                    SyntheticBinding::ColorWriteTable if stage == Stage::Fragment => {
-                        WriteSource::ColorWriteTable
                     }
                     // The command buffer's status, on a device that does not address buffers.
                     SyntheticBinding::ExecutionStatus => WriteSource::ExecutionStatus,
@@ -2709,7 +2703,6 @@ fn plan(p: &RenderPipeline, device: &Device, shape: &BindShape) -> Result<Bindin
             deindexed: primitive_id_indices,
             private_list,
             storage_kept: storage_kept(p)?,
-            color_write_rules: p.graphics.color_write_rules.clone(),
         }),
         views,
     })
@@ -4577,13 +4570,6 @@ fn instantiate(
                     .flat_map(|v| v.to_le_bytes())
                     .collect(),
                 PushField::StorageKeptChannels => FieldBytes::of(&t.storage_kept.to_le_bytes()),
-                // The attachment's rule word, as link derived it from the pipeline's attachment.
-                PushField::ColorWriteRule(color) => {
-                    match t.color_write_rules.iter().find(|(c, _)| *c == color) {
-                        Some((_, word)) => FieldBytes::of(&word.to_le_bytes()),
-                        None => return Err(internal("a color write rule link gave no word")),
-                    }
-                }
                 // The blend color as an extended-range blend reads it, and one minus it.
                 PushField::BlendColor => FieldBytes::words(
                     crate::lower::arith::extended_range::blend_color::constant_words(
