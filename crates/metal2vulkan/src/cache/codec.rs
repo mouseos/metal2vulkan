@@ -1247,7 +1247,6 @@ codec_enum! {
         ConstantLanes { slot },
         FunctionTableRange { addressed },
         TestedStorageWrites { early_tests, early_variant },
-        YCbCrTexture { slot },
         TileThreadgroup { tile_sized },
         ConstexprSampled { slot, modes },
         CubicSampler { slot },

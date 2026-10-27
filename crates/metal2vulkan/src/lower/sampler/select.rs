@@ -2357,19 +2357,16 @@ fn select_one(
     // slot's specialization then reads.
     let one_texel = one_texel(&op, sampler, shape.dim == ImageDim::Cube)?;
     // On a device that samples through Metal's own texture unit, the `half` routine reads an
-    // access's lanes only for a YCbCr field's one texel (`half::HalfFamilies::MetalSampler`),
-    // which a runtime sampler slot's texture holds only under the slot's YCbCr variant
-    // (`texture::ycbcr_texture`): elsewhere no sampler word decides them. A slot's texture of a
-    // YCbCr format on the grid `8192` (`TexelFormat::YCBCR_8192`) bound there without the variant
-    // (`YCbCrFilterPolicy::Device`) then rounds a sample of its one texel to nearest even, where
+    // access's lanes only for a YCbCr field's one texel (`half::HalfFamilies::MetalSampler`): no
+    // sampler word decides them. A slot's texture of a YCbCr format on the grid `8192`
+    // (`TexelFormat::YCBCR_8192`) then rounds a sample of its one texel to nearest even, where
     // Metal rounds it with ties away, noted where it is bound.
     let one_texel = match one_texel {
         crate::lower::texture::OneTexel::Word(_)
             if half
                 && !raw
                 && crate::lower::texture::half_families(cx)
-                    == crate::lower::texture::half::HalfFamilies::MetalSampler
-                && !crate::lower::texture::ycbcr_texture(cx, image, shape)? =>
+                    == crate::lower::texture::half::HalfFamilies::MetalSampler =>
         {
             if let ImageRef::Slot(index) = image {
                 use crate::metal::texel_format::TexelFormat;

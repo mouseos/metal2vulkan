@@ -13,7 +13,7 @@ use crate::device::description::{
 use crate::device::function_storage;
 use crate::device::metal::MetalDeviceProperties;
 use crate::device::policy::{
-    ContainmentPolicy, DevicePolicy, SamplingPolicy, Unorm8LinearFilterPolicy, YCbCrFilterPolicy,
+    ContainmentPolicy, DevicePolicy, SamplingPolicy, Unorm8LinearFilterPolicy,
 };
 use crate::device::profile::{
     BufferAccess, Containment, CubeGradientRoute, CubeGradients, DescriptorCaps, DeviceProfile,
@@ -366,20 +366,6 @@ fn derive_fields(
             NanEncoding::MetalCanonical
         } else {
             NanEncoding::Native
-        },
-        // Metal's filter of a two-plane YCbCr texture through the slot's variant where the policy
-        // asks for it: on a device that samples through Metal's own sampler, under the YCbCr
-        // filter's switch or Metal's sampling; on one that samples natively, under the switch. A
-        // device that emulates Metal's sampler answers it in every module.
-        ycbcr_variant: match deviates(DriverDeviation::MetalSampler) {
-            true => {
-                policy.ycbcr_filter == YCbCrFilterPolicy::Exact
-                    || policy.sampling == SamplingPolicy::Exact
-            }
-            false => {
-                policy.sampling == SamplingPolicy::NativeDevice
-                    && policy.ycbcr_filter == YCbCrFilterPolicy::Exact
-            }
         },
         // The planes of a two-plane YCbCr texture read in place where the GPU reads host memory
         // with no bus between: an integrated GPU's, a CPU device's.

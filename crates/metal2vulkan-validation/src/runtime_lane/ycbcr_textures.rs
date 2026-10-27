@@ -9,11 +9,9 @@
 //!   both matrices, and for one surface Metal's own reads of it texel by texel
 //!   ([`METAL_READS`]). A nearest sample at each texel's centre reads the same texel,
 //!   unannounced; a linear one there too, and between the texels it is Metal's filter of them,
-//!   unannounced (the lane's devices sample as Metal does). Under native sampling it is Metal's
-//!   filter under `YCbCrFilterPolicy::Exact`, through one pipeline more at the draw, and under
-//!   the default the device's filter of the same texels (on MoltenVK Metal's own sampler's,
-//!   announced), within [`DEVICE_FILTER_BOUND`] of Metal's, through the pipeline the state's
-//!   creation made. A function that samples handles and reaches the texture is refused, typed.
+//!   unannounced (the lane's devices sample as Metal does). Under native sampling it is the
+//!   device's filter of the same texels (on MoltenVK Metal's own sampler's, announced), within
+//!   [`DEVICE_FILTER_BOUND`] of Metal's, through the pipeline the state's creation made. A function that samples handles and reaches the texture is refused, typed.
 //! - The texture follows writes of its planes' bytes through other textures over them, as a
 //!   decoder writes the planes as `R8Unorm` and `RG8Unorm` textures: in an earlier command
 //!   buffer, an earlier encoder of the same one, an earlier dispatch of the same encoder, and a
@@ -40,7 +38,7 @@ use metal2vulkan::bind::{
     ycbcr_read, ycbcr_texel, ycbcr_write, SamplerDescriptor, YCbCrCodes, YCbCrMatrix, YCbCrOutput,
     YCbCrRange,
 };
-use metal2vulkan::device::{SamplingPolicy, VkProperty, YCbCrFilterPolicy};
+use metal2vulkan::device::{SamplingPolicy, VkProperty};
 use metal2vulkan::error::{BindError, Feature, RuntimeDriverDefect};
 use metal2vulkan::metal::format::{ycbcr_format, ChromaSubsampling, YCbCrReads};
 use metal2vulkan::metal::{
@@ -885,8 +883,8 @@ fn half_of_step(k: u16) -> u16 {
 }
 
 /// A linear sample is Metal's filter of the exact texels, unannounced: at each texel's centre it
-/// is the texel, and between texels Metal's step, on every device (the emulation of Metal's filter;
-/// under MoltenVK, the slot's YCbCr variant).
+/// is the texel, and between texels Metal's step, on every device (the planes read in place on a
+/// device whose memory is the host's, the emulation of Metal's filter elsewhere).
 #[test]
 fn a_linear_sample_of_a_ycbcr_texture_is_metals() {
     on_device(|device, messages| {
@@ -1251,8 +1249,8 @@ fn a_fragments_linear_sample_is_metals_through_each_sampler_and_result() {
 /// `1/2048`, 0.125 (`ycbcr-filter-not-exact`).
 const DEVICE_FILTER_BOUND: f32 = 0.5;
 
-/// Under native sampling (`SamplingPolicy::NativeDevice`) and the default
-/// (`YCbCrFilterPolicy::Device`), a fragment function's linear sample of a `YCBCR8_420_2P` texture
+/// Under native sampling (`SamplingPolicy::NativeDevice`), a fragment function's linear sample of
+/// a `YCBCR8_420_2P` texture
 /// through a runtime sampler, with a `float` and a `half` result, takes the pipeline a draw binding
 /// any other texture takes: the draw binding it makes no pipeline after the one that bound an
 /// `RGBA16Float` texture of the same texels, and its samples are that texture's bit for bit (the
@@ -1261,27 +1259,11 @@ const DEVICE_FILTER_BOUND: f32 = 0.5;
 /// samples through Metal's own sampler `ycbcr-filter-not-exact`, once, naming the slot and the
 /// format, and no `device-sampling`. A device whose memory is the host's reads the planes in place
 /// instead (`ycbcr_in_place.rs`): one pipeline more, its samples Metal's step exactly, announced by
-/// no filter notice, as under the exact switch.
+/// no filter notice.
 #[test]
 fn a_ycbcr_slot_takes_the_devices_filter_in_the_pipeline_its_creation_made() {
-    ycbcr_draws_under(YCbCrFilterPolicy::Device);
-}
-
-/// [`a_ycbcr_slot_takes_the_devices_filter_in_the_pipeline_its_creation_made`] under Metal's
-/// filter of the format (`YCbCrFilterPolicy::Exact`): on every device the draw binding the
-/// texture takes the slot's YCbCr variant, one pipeline more, and its samples are Metal's step
-/// exactly, announced by no filter notice.
-#[test]
-fn a_ycbcr_slot_takes_metals_filter_under_the_exact_switch() {
-    ycbcr_draws_under(YCbCrFilterPolicy::Exact);
-}
-
-/// The draws of [`a_ycbcr_slot_takes_the_devices_filter_in_the_pipeline_its_creation_made`] on a
-/// device that samples natively, under `filter`.
-fn ycbcr_draws_under(filter: YCbCrFilterPolicy) {
     let native = |options: &mut DeviceOptions| {
         options.policy.sampling = SamplingPolicy::NativeDevice;
-        options.policy.ycbcr_filter = filter;
     };
     on_device_with(native, |device, messages| {
         let kernels = Kernels::new(device);
@@ -1309,9 +1291,8 @@ fn ycbcr_draws_under(filter: YCbCrFilterPolicy) {
             .properties
             .contains(&VkProperty::MetalSampler);
         // A device whose memory is the host's reads the planes in place, Metal's filter exactly,
-        // in the slot's in-place variant under either policy.
-        let in_place = super::ycbcr_in_place::reads_in_place(device);
-        let exact = filter == YCbCrFilterPolicy::Exact || in_place;
+        // in the slot's in-place variant.
+        let exact = super::ycbcr_in_place::reads_in_place(device);
         let linear = sampler(device, SamplerMinMagFilter::Linear);
         let library = device
             .new_library_with_air(&llvm_assemble_text(&fragments()).unwrap())
@@ -1392,8 +1373,7 @@ pub(super) const YCBCR_FILTERS: [Degradation; 1] = [Degradation::YCbCrFilterNotE
 /// A)`. On a device that samples through Metal's own sampler (`VkProperty::MetalSampler`) the
 /// view composes the swizzle and the class drops the field the emulation of Metal's filter reads
 /// (`TexelFormat::swizzled`): the sample takes the device's filter, Metal's own of the converted
-/// texels, the class measured by no family keeping the device's sample under the slot's YCbCr
-/// variant, bit for bit an `RGBA16Float` texture's of the same texels under the same swizzle, and
+/// texels, the class measured by no family keeping the device's sample, bit for bit an `RGBA16Float` texture's of the same texels under the same swizzle, and
 /// announces [`YCBCR_FILTERS`] once, naming the slot and the format, in place of the generic filter
 /// notes, which it does not announce. Elsewhere the class is a swizzled packed one
 /// (`TexelFormat::packed_exact`): the slot's view takes no swizzle, the emulation filters the

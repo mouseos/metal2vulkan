@@ -149,15 +149,6 @@
 //! class (`PackedTexels::one_level`, `reaches_word`). A constexpr sampler with a mip filter keeps
 //! the device's filter, noted.
 //!
-//! On a device whose sampler answers the module's samples such a slot's emulation is its YCbCr
-//! variant's alone ([`Linear::exact_only`]), on a profile that takes the variant
-//! (`ProfileFields::ycbcr_variant`: under `YCbCrFilterPolicy::Exact`, and on a device that samples
-//! through Metal's own sampler also under `SamplingPolicy::Exact`; elsewhere the device filters
-//! the slot as any other, `YCbCrFilterPolicy::Device`, noted): the binder binds a two-plane YCbCr
-//! format there, whose class is `EXACT` or measured by no family, so only an `EXACT` class takes
-//! the emulation, through the exact routine alone, and every other class the device's sample,
-//! which is Metal's own filter on that device.
-//!
 //! **Depth textures and comparisons** (the probe, px3 and px4 probes, Apple M4 on macOS 27.0.1).
 //! A depth texture's linear sample is its color class's (`metal::texel_format`: `Depth32Float` an
 //! `R32Float`'s, `Depth16Unorm` an `R16Unorm`'s), so the emulation answers it by the class, its
@@ -250,14 +241,6 @@ pub struct Linear {
     /// raw view (`BindingKey::raw`). `None`: the taps are fetched through the sample's binding (a
     /// cube's through its faces' view).
     pub fetch: Option<super::BindingKey>,
-    /// The emulation of a slot under its YCbCr variant on a device whose sampler answers the
-    /// module's samples (`DeviceProfile::device_samples`): only an `EXACT` class takes it, through
-    /// the exact routine alone, and every other class the device's sample, Metal's own filter. The
-    /// binder puts a slot in the variant only where it binds a two-plane YCbCr format there
-    /// (`bind::plan::slots::ycbcr_variant`), whose class is `EXACT` or measured by no family
-    /// (`metal::texel_format`'s `two_plane_family`), never the accumulated routine's: so the
-    /// emulated routine, which no such class reads, is not called.
-    pub exact_only: bool,
     /// The device's filter answers the native classes (`native`): on a profile that takes
     /// `DriverDeviation::Unorm8LinearFilter`, a 2D slot's sample through a constexpr or runtime
     /// sampler slot hands an 8-bit unsigned normalized class to the device at Metal's footprint
@@ -328,12 +311,9 @@ impl Linear {
     }
 
     /// The class bits of which one names a family the emulation takes: `EXACT`, `LINEAR`, or
-    /// `HALF`; only `EXACT` under [`exact_only`](Self::exact_only).
+    /// `HALF`.
     pub(super) fn measured(&self) -> u32 {
-        match self.exact_only {
-            true => BicubicTexels::EXACT,
-            false => BicubicTexels::EXACT | BicubicTexels::LINEAR | BicubicTexels::HALF,
-        }
+        BicubicTexels::EXACT | BicubicTexels::LINEAR | BicubicTexels::HALF
     }
 
     /// The plane axes: 1, 2 (a cube's face's included), or 3.
@@ -528,12 +508,9 @@ pub(super) fn select(
         Some(SamplerRef::Slot(n)) => Some(n),
         _ => None,
     };
-    // On a device that samples through Metal's own sampler, the device's filter is Metal's, but
-    // for a slot under its YCbCr variant; on one that samples natively, the device's filter is the
-    // answer, but for a slot under its YCbCr variant where the policy asks for Metal's filter of
-    // the format (`ProfileFields::ycbcr_variant`).
-    let metal_sampler = cx.profile.device_samples();
-    if metal_sampler && !crate::lower::texture::ycbcr_texture(cx, image, shape)? {
+    // On a device that samples through Metal's own sampler, the device's filter is Metal's; on
+    // one that samples natively, the device's filter is the answer.
+    if cx.profile.device_samples() {
         cx.families.sampler.metal_sampler = true;
         return Ok(None);
     }
@@ -605,7 +582,6 @@ pub(super) fn select(
                 },
                 compare,
                 fetch: None,
-                exact_only: metal_sampler && shape.dim != ImageDim::Cube,
                 native: false,
             };
             let l = Linear {
@@ -653,7 +629,6 @@ pub(super) fn select(
         cube: None,
         compare,
         fetch: None,
-        exact_only: metal_sampler,
         native: false,
     };
     let l = Linear {
@@ -673,9 +648,8 @@ pub(super) fn select(
 /// `PrecisionNote::HalfSampleFilter` for a `half` result, `PrecisionNote::FloatSampleFilter` for a
 /// `float` one (a depth texture's and a comparison's included); `None` for a sample that is not
 /// filtered (a constexpr sampler that reads one texel of one level, [`unfiltered`]), one of another
-/// result, and every sample on a device with the property but a slot's under its YCbCr variant,
-/// whose filter the device's is not, and a slot's whose two-plane YCbCr format the profile leaves
-/// to Metal's own sampler. Where it holds is [`filter_when`]'s, for such a slot
+/// result, and every sample on a device whose sampler answers it but a slot's whose two-plane
+/// YCbCr format Metal's own sampler filters. Where it holds is [`filter_when`]'s, for such a slot
 /// [`metal_filtered_ycbcr`]'s.
 pub(super) fn filter_note(
     cx: &SelectCx<'_>,
@@ -697,14 +671,12 @@ pub(super) fn filter_note(
         }
     }
     let metal = cx.profile.device_samples();
-    let device_metal = metal
-        && !crate::lower::texture::ycbcr_slot(cx, image)?
-        && metal_filtered_ycbcr(cx, image).is_none();
+    let device_metal = metal && metal_filtered_ycbcr(cx, image).is_none();
     Ok((!device_metal).then_some(note))
 }
 
-/// On a device that samples through Metal's own sampler (`VkProperty::MetalSampler`) under
-/// `YCbCrFilterPolicy::Device` (no `ProfileFields::ycbcr_variant`), the clauses under which a
+/// On a device that samples through Metal's own sampler (`VkProperty::MetalSampler`), the clauses
+/// under which a
 /// filtered sample of texture slot `image` is not Metal's filter of the format bound there: where
 /// that format is two-plane YCbCr (its class's `TexelFormat::PACKED` field one of
 /// [`PackedTexels::YCbCr2048`], [`PackedTexels::YCbCr8192`] and
@@ -712,17 +684,18 @@ pub(super) fn filter_note(
 /// sampler then filters as an `RGBA16Float` or `RGBA32Float` texture's texels, not on the format's
 /// own grid. The runtime reads the bound format (`SpecKey::BoundTexelFormat`) and announces it as
 /// `ycbcr-filter-not-exact`, through a runtime sampler whatever its word states. `None` on any
-/// other device or profile, and for a heap's texture, which never takes the variant.
+/// other device, and for a heap's texture.
 pub(super) fn metal_filtered_ycbcr(cx: &SelectCx<'_>, image: ImageRef) -> Option<Vec<NoteClause>> {
     let ImageRef::Slot(index) = image else {
         return None;
     };
-    let fields = cx.profile.fields();
-    let metal = fields
+    let metal = cx
+        .profile
+        .fields()
         .enabled
         .properties
         .contains(&crate::device::requirements::VkProperty::MetalSampler);
-    (metal && !fields.ycbcr_variant).then(|| {
+    metal.then(|| {
         any_of(
             [
                 PackedTexels::YCbCr2048,
@@ -781,23 +754,14 @@ pub(super) fn filter_when(linear: Option<&Linear>, sampler: Option<SamplerRef>) 
 /// (an 8-bit sRGB slot's variant) runs it, through a runtime sampler slot, where the word filters
 /// but the emulation does not reach it, and through a constexpr sampler never; another runs it
 /// where the class names no measured family (for a cube, also a packed normalized format's,
-/// `TexelFormat::packed_exact`; under [`Linear::exact_only`], wherever the class is not `EXACT`)
-/// and, through a runtime sampler slot, where the word filters but states a filter or an address
+/// `TexelFormat::packed_exact`) and, through a runtime sampler slot, where the word filters but states a filter or an address
 /// mode the emulation does not reach (`reaches_word`). A heap texture's runs wherever it is
 /// sampled: its class is its handle's, which no specialization states.
 pub(super) fn device_when(l: &Linear) -> Vec<NoteClause> {
     let LinearImage::Slot(texture) = l.image else {
         return vec![NoteClause::new()];
     };
-    let class = (!l.raw).then(|| match l.exact_only {
-        true => [NoteTest::equal(
-            NoteOn::Texel(texture),
-            BicubicTexels::EXACT,
-            0,
-        )]
-        .into(),
-        false => crate::lower::texture::unmeasured_class(texture),
-    });
+    let class = (!l.raw).then(|| crate::lower::texture::unmeasured_class(texture));
     device_arm(l, texture, class)
 }
 
@@ -1840,7 +1804,7 @@ fn sum(
         let e = call(fb, exact, &args)?;
         return fb.composite_extract(e, &[0]);
     }
-    if l.raw || l.exact_only {
+    if l.raw {
         return call(fb, exact, &args);
     }
     // One routine runs, by a branch on the class, where both ran and a select took one: a

@@ -209,12 +209,6 @@ pub struct VariantKey {
         serde(default, with = "crate::pipeline::serde_pairs")
     )]
     pub snapshot_textures: BTreeMap<SlotRef, SnapshotForm>,
-    /// Texture slots bound in a YCbCr format whose linear samples the function emulates on a
-    /// device that samples through Metal's own sampler: every slot of a
-    /// `RuntimeFact::YCbCrTexture` the shape binds in a two-plane YCbCr format
-    /// (`metal::format::ycbcr_format`). The plan of a pipeline compiled under it states it.
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub ycbcr_textures: BTreeSet<SlotRef>,
     /// Texture slots whose function reads the two-plane YCbCr texture the shape binds there in
     /// place: every slot of a `RuntimeFact::YCbCrInPlace` the shape binds a texture whose planes
     /// are read so (`TextureShape::Texture::ycbcr_in_place`). Each such slot binds the planes'
@@ -536,7 +530,6 @@ impl VariantKey {
             && self.srgb_textures.is_empty()
             && self.srgb_twins.is_empty()
             && self.snapshot_textures.is_empty()
-            && self.ycbcr_textures.is_empty()
             && self.ycbcr_in_place.is_empty()
             && self.address_maps.is_empty()
             && !self.flat_grid
@@ -649,12 +642,6 @@ impl VariantKey {
             .iter()
             .filter(|(s, _)| s.stage == stage)
             .map(|(s, form)| (*s, *form))
-            .collect();
-        out.ycbcr_textures = self
-            .ycbcr_textures
-            .iter()
-            .filter(|s| s.stage == stage)
-            .copied()
             .collect();
         out.ycbcr_in_place = self
             .ycbcr_in_place

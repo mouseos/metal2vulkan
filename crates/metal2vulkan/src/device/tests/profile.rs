@@ -306,42 +306,6 @@ fn below_1_2_and_contradictory_policies_are_refused() {
     assert_eq!(dev.profile().fields().containment, Containment::UnsafeOff);
 }
 
-/// Each of the policy's choices between the device's answer and Metal's, with a function that
-/// flips it alone: the filter of a two-plane YCbCr texture.
-fn exactness_flips() -> [(&'static str, fn(DevicePolicy) -> DevicePolicy); 1] {
-    use crate::device::{
-        YCbCrFilterPolicy as Y,
-    };
-    [
-        ("ycbcr_filter", |p| DevicePolicy {
-            ycbcr_filter: match p.ycbcr_filter {
-                Y::Device => Y::Exact,
-                Y::Exact => Y::Device,
-            },
-            ..p
-        }),
-    ]
-}
-
-/// On MoltenVK on the M3, each choice still moves the key: the YCbCr filter's moves whether a
-/// two-plane YCbCr slot takes its variant
-/// (`ProfileFields::ycbcr_variant`), Metal's sampler filtering such a texture's converted texels
-/// otherwise.
-#[test]
-fn each_choice_keys_apart_on_moltenvk() {
-    let desc = profile("moltenvk-m3");
-    let fp = |p: DevicePolicy| {
-        Device::new(desc.clone(), p)
-            .unwrap()
-            .profile()
-            .fingerprint()
-    };
-    let base = DevicePolicy::default();
-    for (name, flip) in exactness_flips() {
-        assert_ne!(fp(flip(base)), fp(base), "{name}");
-    }
-}
-
 #[test]
 fn fingerprint_covers_every_policy_field() {
     let desc = profile("lavapipe");
@@ -363,11 +327,6 @@ fn fingerprint_covers_every_policy_field() {
     let mut p = base;
     p.sampling = crate::device::SamplingPolicy::Exact;
     variants.push(("sampling", p));
-    // Each choice between the device's answer and Metal's flipped alone, whichever the default
-    // takes (lavapipe measures none of Metal's forms).
-    for (name, flip) in exactness_flips() {
-        variants.push((name, flip(base)));
-    }
     let mut seen = vec![reference];
     for (name, p) in variants {
         let h = fp(p);

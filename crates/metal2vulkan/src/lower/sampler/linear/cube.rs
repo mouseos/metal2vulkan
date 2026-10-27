@@ -124,7 +124,6 @@ pub(super) fn select(
         cube: Some(face::plan(cx)?),
         compare,
         fetch: None,
-        exact_only: false,
         native: false,
     };
     cx.families

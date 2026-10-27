@@ -91,11 +91,9 @@ compile does. `DevicePolicy::default()` is `DevicePolicy::UNTRUSTED`:
   functions are Metal's own, they are Metal's answers, but for a NaN's bits where the device is
   not measured to answer Metal's.
 - **Fast native forms off Apple's GPUs.** The device's own sampler (its filter of a two-plane
-  YCbCr texture among them) and texel conversions. Each records a precision note with its bound,
-  and each has an exact switch. The device's own `half` rounding and its blend of a `half` color
-  have none: each records its note.
-  `DevicePolicy::exact_answers()` turns on every exact form but sampling's, Metal's filter of a
-  two-plane YCbCr texture (`YCbCrFilterPolicy::Exact`) included; `sampling =
+  YCbCr texture among them). It records a precision note with its bound, and has an exact switch.
+  The device's own `half` rounding and its blend of a `half` color have none: each records its
+  note. `DevicePolicy::exact_answers()` turns on every exact form but sampling's; `sampling =
   SamplingPolicy::Exact` emulates Metal's sampler too.
   [FAST-PATHS.md](FAST-PATHS.md) lists every choice, its bound and the measured cost of its exact
   form. On MoltenVK on an Apple GPU, whose sampler and `float` functions are Metal's own, most of
@@ -2091,9 +2089,8 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   swizzle that moves its channels, a linear mip filter, or a sample the emulation does not reach).
   Cost: the texels hold Metal's reads exactly, but the sample filters them as the device does, off
   the grid Metal sums the format's steps on, so a filtered result can miss Metal's by a step of that
-  grid or more. The slot takes Metal's filter only under `YCbCrFilterPolicy::Exact` (on MoltenVK
-  also under `SamplingPolicy::Exact`). Under the default a device that samples natively answers
-  the device's filter, `metal2vulkan-degrade-device-sampling`; on MoltenVK, Metal's own sampler
+  grid or more. A device that samples natively answers the device's filter,
+  `metal2vulkan-degrade-device-sampling`; on MoltenVK, Metal's own sampler
   filters the converted texels as an `RGBA16Float` or `RGBA32Float` texture's, within one step of
   the grid (a `half` result within one `half` ulp, measured in plain Metal on an Apple M3 Max under
   macOS 27.0.1 for `YCBCR8_420_2P` and its sRGB twin against such a texture of the same texels),
@@ -2749,8 +2746,8 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
   lies on the face's diagonal (docs/FAST-PATHS.md's known gaps). A kernel's samples through
   MoltenVK are Metal's own, with no note.
 - `metal2vulkan-degrade-half-texel-conversion` (precision). `PrecisionNote::HalfTexelConversion`:
-  The module reads, gathers, or samples a texture with a `half` result. On MoltenVK under
-  `YCbCrFilterPolicy::Device`, also announced at a draw that binds a two-plane YCbCr texture on
+  The module reads, gathers, or samples a texture with a `half` result. On MoltenVK, also
+  announced at a draw that binds a two-plane YCbCr texture on
   the grid `8192` at a slot sampled through a runtime sampler: a sample of one texel rounds to
   nearest even, one `half` ulp from Metal's ties-away rounding at a tie.
 - `metal2vulkan-degrade-half-sample-filter` (precision). `PrecisionNote::HalfSampleFilter`: The
@@ -2976,8 +2973,7 @@ fast forms record, and each `PrecisionNote`'s rustdoc states its bound.
 - `metal2vulkan-degrade-device-sampling` (precision). `PrecisionNote::DeviceSampling`: Native device
   sampling: the module hands a sample, gather or comparison to the device's own sampler where a
   device whose sampler is not Metal's would emulate Metal's (`SamplingPolicy::NativeDevice`, the
-  default; the module requires `VkProperty::DeviceSampling`). Under `YCbCrFilterPolicy::Device`
-  (the default) that includes a linear sample of a two-plane YCbCr texture, whose texels hold
+  default; the module requires `VkProperty::DeviceSampling`). That includes a linear sample of a two-plane YCbCr texture, whose texels hold
   Metal's reads exactly: the device's filter of them lands within 1.183 codes (1/255) of Metal's
   sum on the format's grid, so a draw binding such a texture makes no pipeline of its own.
 - `metal2vulkan-degrade-native-transcendentals` (precision). `PrecisionNote::NativeTranscendentals`:

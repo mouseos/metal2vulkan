@@ -708,7 +708,6 @@ fn the_inputs_encoding_is_the_earlier_derived_debug() {
                 .replace(", srgb_textures: {}", "")
                 .replace(", srgb_twins: {}", "")
                 .replace(", snapshot_textures: {}", "")
-                .replace(", ycbcr_textures: {}", "")
                 .replace(", ycbcr_in_place: {}", "")
                 .replace(", viewport_index_varying: false", "")
                 .replace(", max_call_stack_depth: None", "")

@@ -13,7 +13,7 @@
 use crate::budget::{Budget, Meter};
 use crate::cache::VariantKey;
 use crate::device::policy::{
-    DevicePolicy, SamplingPolicy, YCbCrFilterPolicy,
+    DevicePolicy, SamplingPolicy,
 };
 use crate::device::{mechanism, Device, DeviceProfile};
 use crate::error::Error;
@@ -275,8 +275,7 @@ fn words(spirv: &[u32]) -> u32 {
 }
 
 /// A step of the compiler-word-bound fallback: the exact forms to drop from the consumer's policy.
-/// `NativeSampling` drops exact sampling, the single largest exact form, with Metal's filter of a
-/// two-plane YCbCr texture (`YCbCrFilterPolicy::Exact`, reported with it); `AllNative` drops every
+/// `NativeSampling` drops exact sampling, the single largest exact form; `AllNative` drops every
 /// module-growing exact answer (the fast default's forms). Neither touches the policy's other
 /// choices (pointer and handle domains, containment, isolation, framebuffer fetch, the 8-bit
 /// filter, or the runtime's choices, which change no module), so a reduced device keeps them.
@@ -291,7 +290,6 @@ impl ReducedForms {
     fn of(self, base: DevicePolicy) -> DevicePolicy {
         let sampled = DevicePolicy {
             sampling: SamplingPolicy::NativeDevice,
-            ycbcr_filter: YCbCrFilterPolicy::Device,
             ..base
         };
         match self {
@@ -312,7 +310,7 @@ fn dropped_forms(
     reduced: &DeviceProfile,
 ) -> RuntimeDependency {
     let fact = RuntimeFact::ExactFormsOverCompilerLimit {
-        sampling: base.sampling != policy.sampling || base.ycbcr_filter != policy.ycbcr_filter,
+        sampling: base.sampling != policy.sampling,
     };
     RuntimeDependency {
         fact,

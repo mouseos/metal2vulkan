@@ -535,13 +535,6 @@ pub struct ProfileFields {
     /// or the device's own, which the module records where Metal answers a NaN. Either way the
     /// translation leaves every NaN's bits to the device.
     pub nan_encoding: NanEncoding,
-    /// Whether a linear sample the device's sampler answers (`DeviceProfile::device_samples`)
-    /// takes Metal's filter of a two-plane YCbCr texture bound at its slot, through the slot's
-    /// YCbCr variant (`RuntimeFact::YCbCrTexture`): under the policy's `YCbCrFilterPolicy::Exact`,
-    /// and on a device that samples through Metal's own sampler also under `SamplingPolicy::Exact`.
-    /// Elsewhere the device filters such a texture as any other. Derived, so a profile that answers
-    /// alike under both policies keys the same.
-    pub ycbcr_variant: bool,
     /// Whether a two-plane YCbCr texture's planes may be read in place
     /// (`bind::YCbCrInPlace`): on a device whose GPU reads the planes' memory with no bus between
     /// (`VkPhysicalDeviceType` integrated or CPU), a texture slot whose function reads such a

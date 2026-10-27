@@ -8,7 +8,7 @@
 
 use crate::device::{
     BatchOrderPolicy, CompletionPolicy, DevicePolicy, HeapCompressionPolicy, HostPageTexturePolicy,
-    RenderLoweringPolicy, SamplingPolicy, Unorm8LinearFilterPolicy, YCbCrFilterPolicy,
+    RenderLoweringPolicy, SamplingPolicy, Unorm8LinearFilterPolicy,
 };
 use crate::pipeline::PrecisionNote;
 use std::collections::BTreeSet;
@@ -60,7 +60,6 @@ fn choices() -> Vec<Choice> {
         // The accuracy choices, below.
         unorm8_linear_filter: _,
         sampling: _,
-        ycbcr_filter: _,
         // The runtime's: a heap's compressed texture's image, when the host sees a command buffer
         // complete, how a batch begins after the earlier ones of its queue, where a render
         // encoder's calls are lowered, and what holds a sampled texture over host pages.
@@ -73,7 +72,6 @@ fn choices() -> Vec<Choice> {
     vec![
         choice!(p.unorm8_linear_filter: Unorm8LinearFilterPolicy { Exact, DeviceWithinOneCode }),
         choice!(p.sampling: SamplingPolicy { NativeDevice, Exact }),
-        choice!(p.ycbcr_filter: YCbCrFilterPolicy { Device, Exact }),
         choice!(p.heap_compression: HeapCompressionPolicy { Compressed, Uncompressed }),
         choice!(p.completion: CompletionPolicy { Grouped, Exact }),
         choice!(p.batch_order: BatchOrderPolicy { Ends, Exact }),
@@ -114,7 +112,6 @@ fn notes() -> Vec<(&'static str, Ledger)> {
     notes! {
         FastDefault: [
             DeviceSampling,
-            HalfTexelConversion,
         ],
         NotBuilt: [
             ExtendedRangeBlendSource,
@@ -144,6 +141,7 @@ fn notes() -> Vec<(&'static str, Ledger)> {
             NativeHalfConversion,
             NativeHalfQuantize,
             DeviceTexelConversion,
+            HalfTexelConversion,
             F16FmaDoubleRounding,
             F16IntConvDoubleRounding,
             GradFromBias,

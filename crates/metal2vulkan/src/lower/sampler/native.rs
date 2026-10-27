@@ -117,7 +117,6 @@ pub(super) fn planned(cx: &mut SelectCx<'_>, l: &Linear, shape: ImageShape) -> b
         && l.cube.is_none()
         && l.compare.is_none()
         && !l.raw
-        && !l.exact_only
         && matches!(l.image, LinearImage::Slot(_))
         && match &l.state {
             LinearState::Constant { pixel, .. } => !pixel,

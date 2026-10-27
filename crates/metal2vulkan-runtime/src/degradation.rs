@@ -1354,14 +1354,13 @@ degradations! {
         /// `PrecisionNote::HalfSampleFilter` or `FloatSampleFilter` under the slot's bound format
         /// (a format whose filter is not measured, a swizzle that moves its channels, a linear
         /// mip filter, or a sample the emulation does not reach), or, on a device that samples
-        /// through Metal's own sampler under `YCbCrFilterPolicy::Device` (no slot variant), under
-        /// any two-plane YCbCr format bound there, whose converted texels Metal's sampler filters
+        /// through Metal's own sampler, under any two-plane YCbCr format bound there, whose converted texels Metal's sampler filters
         /// as an `RGBA16Float` or `RGBA32Float` texture's: within one step of the format's grid of
         /// Metal's filter of the format, a `half` result within one `half` unit in the last place
         /// (plain Metal on an Apple M3 Max under macOS 27.0.1, `YCBCR8_420_2P` and its `_sRGB`
         /// twin against such a texture of the same texels). Announced, in place of those notes'
-        /// own notices for the slot, where the specialized pipeline is made, or, without the
-        /// variant, at a draw or dispatch that binds such a texture there (through a runtime
+        /// own notices for the slot, where the specialized pipeline is made, or at a draw or
+        /// dispatch that binds such a texture there (through a runtime
         /// sampler, whatever its word states), naming the slot and the format.
         YCbCrFilterNotExact = "ycbcr-filter-not-exact", Precision,
             "the texels hold Metal's reads exactly, but the sample filters them as the device \

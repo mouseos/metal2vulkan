@@ -29,10 +29,6 @@ pub struct DevicePolicy {
     /// Whether a device that does not sample through Metal's own sampler samples natively (the
     /// default) or emulates Metal's sampler exactly.
     pub sampling: SamplingPolicy,
-    /// Whether, under native device sampling, a linear sample of a texture slot bound to a
-    /// two-plane YCbCr texture is the device's own filter of its texels (the default) or Metal's
-    /// filter of the format, emulated in a variant of the pipeline the draw binding it makes.
-    pub ycbcr_filter: YCbCrFilterPolicy,
 
     /// Whether a heap's colour texture that Metal keeps losslessly compressed, on a driver whose
     /// compressed images hide writes through an alias, is the driver's compressed image (the
@@ -64,10 +60,10 @@ pub struct DevicePolicy {
 
 impl DevicePolicy {
     /// The untrusted-guest production policy: containment and isolation on, Metal's 8-bit linear
-    /// filter emulated exactly where the emulation runs, native device sampling (a two-plane YCbCr texture's samples among them),
-    /// the driver's compressed image of a heap's texture Metal keeps compressed, command buffers
-    /// ready together in one kernel submission, batches of one queue ordered by their ends where
-    /// the driver runs them one after another, and a sampled
+    /// filter emulated exactly where the emulation runs, native device sampling, the driver's
+    /// compressed image of a heap's texture Metal keeps compressed, command buffers ready together
+    /// in one kernel submission, batches of one queue ordered by their ends where the driver runs
+    /// them one after another, and a sampled
     /// texture over host pages in place where the device's check passed.
     pub const UNTRUSTED: DevicePolicy = DevicePolicy {
         pointer_domain: PointerDomain::ResidentTable,
@@ -76,7 +72,6 @@ impl DevicePolicy {
         isolation: GuestIsolation::On,
         unorm8_linear_filter: Unorm8LinearFilterPolicy::Exact,
         sampling: SamplingPolicy::NativeDevice,
-        ycbcr_filter: YCbCrFilterPolicy::Device,
         heap_compression: HeapCompressionPolicy::Compressed,
         completion: CompletionPolicy::Grouped,
         batch_order: BatchOrderPolicy::Ends,
@@ -84,9 +79,8 @@ impl DevicePolicy {
         host_page_textures: HostPageTexturePolicy::InPlace,
     };
 
-    /// This policy with Metal's answer wherever the choices offer it: its filter of a
-    /// two-plane YCbCr texture
-    /// ([`YCbCrFilterPolicy::Exact`]), a heap's texture whose bytes alias the heap's
+    /// This policy with Metal's answer wherever the choices offer it: a heap's texture whose bytes
+    /// alias the heap's
     /// as written ([`HeapCompressionPolicy::Uncompressed`]), each command buffer seen complete
     /// at its own end ([`CompletionPolicy::Exact`]), each batch ordered after the earlier ones of
     /// its queue by
@@ -97,7 +91,6 @@ impl DevicePolicy {
     /// other field are kept.
     pub const fn exact_answers(self) -> DevicePolicy {
         DevicePolicy {
-            ycbcr_filter: YCbCrFilterPolicy::Exact,
             heap_compression: HeapCompressionPolicy::Uncompressed,
             completion: CompletionPolicy::Exact,
             batch_order: BatchOrderPolicy::Exact,
@@ -167,38 +160,6 @@ pub enum SamplingPolicy {
     NativeDevice,
     /// Metal's sampler, emulated exactly where the device's differs: the module's size and the
     /// driver's making time grow with each sample.
-    Exact,
-}
-
-/// How a linear sample of a texture slot bound to a two-plane YCbCr texture
-/// (`metal::format::ycbcr_format`) is filtered where the module leaves the slot's samples to the
-/// device's sampler: on a device that samples natively ([`SamplingPolicy::NativeDevice`], the
-/// module requiring `VkProperty::DeviceSampling`), and on one that samples through Metal's own
-/// sampler (MoltenVK on Apple's GPU) under native sampling. The texture's image holds Metal's reads
-/// of the planes exactly, steps of `1/2048` or `1/8192`; Metal's filter sums those steps on their
-/// grid, each term truncated, at its own weights, so the device's filter of the same texels lands
-/// off Metal's answer: natively within the bound `PrecisionNote::DeviceSampling` states, through
-/// Metal's own sampler within one step of the grid (`ycbcr-filter-not-exact`). Under
-/// [`SamplingPolicy::Exact`] every sample is Metal's, through the slot's variant on MoltenVK.
-#[non_exhaustive]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum YCbCrFilterPolicy {
-    /// The device's filter of the texture's texels, as for every other format (the default: the
-    /// owner's ruling, making time before exactness, recorded and announced): the pipeline a draw
-    /// binding such a texture takes is the one a draw binding any other texture takes, so the draw
-    /// makes none. A natively sampling module records
-    /// [`PrecisionNote::DeviceSampling`](crate::pipeline::PrecisionNote::DeviceSampling), whose
-    /// docs state the bound measured against Metal; through Metal's own sampler the module records
-    /// its filter note under the bound format, which the runtime announces as
-    /// `ycbcr-filter-not-exact` where a draw binds such a texture, and a `half` sample's one texel
-    /// on the grid `8192` through a runtime sampler rounds to nearest even
-    /// ([`PrecisionNote::HalfTexelConversion`](crate::pipeline::PrecisionNote::HalfTexelConversion)).
-    #[default]
-    Device,
-    /// Metal's filter of the format, emulated: a draw that binds such a texture at a slot the
-    /// function samples linearly takes the slot's YCbCr variant (`RuntimeFact::YCbCrTexture`), a
-    /// pipeline of its own, made at that draw.
     Exact,
 }
 
