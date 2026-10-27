@@ -1639,8 +1639,8 @@ declare i32 @air.get_width_texture_2d(ptr addrspace(1), i32)
                 // Both loads call the module's one search function, so its 16 steps (one
                 // `OpULessThanEqual` each: of the `u64` ids with `shaderInt64`, else of the low
                 // words) and its read of the table's length are emitted once. The module was
-                // about 3,500 words with a search per load; it is 1,520 with `u64` ids and 2,202
-                // with word ids.
+                // about 3,500 words with a search per load; it is within 1,600 with `u64` ids
+                // and 2,300 with word ids, the bounds below.
                 // The write's normalized channels are the device's conversion: noted where the
                 // profile is not measured to store Metal's codes, or where it stores a texture
                 // of a 1-bit alpha, which it rounds otherwise.
@@ -1660,10 +1660,15 @@ declare i32 @air.get_width_texture_2d(ptr addrspace(1), i32)
                 assert_eq!(count(&a, OP_FUNCTION_CALL), 2, "{stem}");
                 assert_eq!(count(&a, OP_ULESS_THAN_EQUAL), 16, "{stem}");
                 assert_eq!(count(&a, OP_ARRAY_LENGTH), 1, "{stem}");
-                let bound = if p.fields().leaf.int64 { 1_600 } else { 2_300 };
+                // And an `A8Unorm` member's alpha moved into red where the device holds such a
+                // texture so (`metal::format::alpha_in_red`): the class index's read and the
+                // conversion.
+                let a8 = crate::metal::format::alpha_in_red(crate::metal::PixelFormat::A8Unorm, &p);
+                let alpha = if a8 { 100 } else { 0 };
+                let bound = alpha + if p.fields().leaf.int64 { 1_600 } else { 2_300 };
                 assert!(
                     a.module.words.len() <= bound,
-                    "{stem}: {} words over {bound}",
+                    "{stem}: {} words over {bound} (alpha in red {a8})",
                     a.module.words.len()
                 );
                 assert_eq!(uses(&a, "texture.write.heap"), 1, "{stem}");

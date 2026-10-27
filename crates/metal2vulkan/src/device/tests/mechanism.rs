@@ -353,7 +353,7 @@ fn variant(f: &RuntimeFact) -> usize {
         RuntimeFact::ReplayBindings => 88,
         RuntimeFact::MergedDraws => 89,
         RuntimeFact::QuadPrimitiveIds => 90,
-        RuntimeFact::RotatedWeights => 91,
+        RuntimeFact::RotatedWeights => 82,
         RuntimeFact::PrivateList => 86,
         RuntimeFact::MeshLastFirst => 71,
         RuntimeFact::YCbCrInPlace { .. } => 65,
@@ -364,7 +364,7 @@ fn variant(f: &RuntimeFact) -> usize {
 fn mechanism_is_total_over_every_fact_and_profile() {
     let facts = every_fact();
     let covered: std::collections::BTreeSet<usize> = facts.iter().map(variant).collect();
-    assert_eq!(covered, (0..92).collect(), "every_fact misses a variant");
+    assert_eq!(covered, (0..91).collect(), "every_fact misses a variant");
     for (stem, _) in super::committed_profiles() {
         let dev = device(&stem);
         let p = dev.profile();
