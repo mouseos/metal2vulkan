@@ -804,6 +804,24 @@ fn half_value(bits: u16) -> f32 {
     (sign * magnitude) as f32
 }
 
+/// `x` (not a NaN) rounded toward zero to `half`: a finite value past 65504 is 65504.
+fn half_toward_zero(x: f32) -> u16 {
+    let sign = if x.is_sign_negative() { 0x8000u16 } else { 0 };
+    let a = x.abs();
+    if a.is_infinite() {
+        return sign | 0x7c00;
+    }
+    if a >= 65504.0 {
+        return sign | 0x7bff;
+    }
+    if a < 2f32.powi(-14) {
+        return sign | (a * 2f32.powi(24)).floor() as u16;
+    }
+    let bits = a.to_bits();
+    let exponent = ((bits >> 23) & 0xff) as u16 - (127 - 15);
+    sign | (exponent << 10) | ((bits >> 13) & 0x3ff) as u16
+}
+
 fn devices() -> Vec<(String, Device)> {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../metal2vulkan-validation/profiles");
