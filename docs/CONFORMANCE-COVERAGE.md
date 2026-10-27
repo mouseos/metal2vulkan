@@ -3000,12 +3000,12 @@ A case whose difference from Metal is recorded rather than compared away. The le
 | `sampler-axis-mode-triples` | A sample of a 3D texture whose texels hold small whole numbers, under the three axes' address modes, through the device's own sampler: at some of the site's coo… |
 | `sampler-axis-mode-triples` | A sample of a 3D texture whose texels hold small whole numbers, under the three axes' address modes, through the device's own sampler: the filter's weights diff… |
 | `sampler-axis-mode-triples` | A sample of a 3D texture whose texels hold small whole numbers, under the three axes' address modes, through the device's own sampler: at some of the site's coo… |
-| `sampler-border-colours` | At the site's coordinates near the texture's edge, Metal's sample reads a texel (0.1255, code 32, at the first differing element) where the device's sampler ans… |
-| `sampler-border-colours` | At the site's coordinates near the texture's edge, Metal's sample reads a texel (0.1255, code 32, at the first differing element) where the device's sampler ans… |
-| `sampler-border-colours` | At the site's coordinates near the texture's edge, Metal's sample reads a texel (0.1255, code 32, at the first differing element) where the device's sampler ans… |
-| `sampler-border-colours` | At the site's coordinates near the texture's edge, Metal's sample reads a texel (0.1255, code 32, at the first differing element) where the device's sampler ans… |
-| `sampler-border-colours` | At the site's coordinates near the texture's edge, Metal's sample reads a texel (0.1255, code 32, at the first differing element) where the device's sampler ans… |
-| `sampler-border-colours` | At the site's coordinates near the texture's edge, Metal's sample reads a texel (0.1255, code 32, at the first differing element) where the device's sampler ans… |
+| `sampler-border-colours` | At the site's coordinates near the edge of the case's 3D texture, Metal's sample reads a texel (0.1255, code 32, at the first differing element) where the devic… |
+| `sampler-border-colours` | At the site's coordinates near the edge of the case's 3D texture, Metal's sample reads a texel (0.1255, code 32, at the first differing element) where the devic… |
+| `sampler-border-colours` | At the site's coordinates near the edge of the case's 3D texture, Metal's sample reads a texel (0.1255, code 32, at the first differing element) where the devic… |
+| `sampler-border-colours` | At the site's coordinates near the edge of the case's 3D texture, Metal's sample reads a texel (0.1255, code 32, at the first differing element) where the devic… |
+| `sampler-border-colours` | At the site's coordinates near the edge of the case's 3D texture, Metal's sample reads a texel (0.1255, code 32, at the first differing element) where the devic… |
+| `sampler-border-colours` | At the site's coordinates near the edge of the case's 3D texture, Metal's sample reads a texel (0.1255, code 32, at the first differing element) where the devic… |
 | `sampler-r-address-modes` | A sample of a 3D texture whose texels hold small whole numbers, under the `r` axis's address mode, through the device's own sampler: at some of the site's coord… |
 | `sampler-r-address-modes` | A sample of a 3D texture whose texels hold small whole numbers, under the `r` axis's address mode, through the device's own sampler: the filter's weights differ… |
 | `sampler-r-address-modes` | A sample of a 3D texture whose texels hold small whole numbers, under the `r` axis's address mode, through the device's own sampler: at some of the site's coord… |
