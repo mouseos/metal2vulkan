@@ -2077,11 +2077,6 @@ fn select_float_fn(
     {
         cx.families.arith.take_fma(fma);
     }
-    // `dot`'s result is a scalar.
-    let result = match lowered.how {
-        FloatLowering::Fn(FloatFn::Dot) | FloatLowering::Dot(_) => f.scalar_form(),
-        _ => f,
-    };
     let s = match lowered.how {
         FloatLowering::Fma(fma) => ArithStrategy::Fma(fma),
         FloatLowering::FastFmod(fma) => ArithStrategy::FastFmod { fma },
