@@ -218,7 +218,6 @@ pub(crate) fn query_min_level(desc: &SamplerDescriptor) -> u32 {
 /// on that grid handed to it reads Metal's level and weight: a sampler of a texture whose texels
 /// are filtered (not an integer one), with a nearest or linear mip filter, one filter for
 /// minification and magnification (so the level's sign chooses nothing), and no anisotropy.
-/// [`SamplerWord::LEVEL_RULE`] states it to the shader.
 pub(crate) fn clamps_on_grid(desc: &SamplerDescriptor, use_: SamplerUse) -> bool {
     !use_.integer_texture
         && desc.mip_filter != SamplerMipFilter::NotMipmapped
@@ -336,9 +335,8 @@ pub(crate) fn vk_filtering(
 /// every such sampler, with one exception where the min and mag filters differ or the sampler is
 /// anisotropic (`clamps_on_grid` false): a bound above 0 whose grid value is 0 stays as given,
 /// since Vulkan reads the mag filter at a clamped level of 0 where Metal reads the min filter at a
-/// level above 0. Only `clamps_on_grid`'s samplers also take a level the function hands on the grid
-/// (`SamplerWord::LEVEL_RULE`); the others' samples keep the device's level, so their bounds on the
-/// grid are expected to read closer to Metal's level, unmeasured. An integer texture's sampler
+/// level above 0. Every sample keeps the device's level, so the bounds on the grid are expected to
+/// read closer to Metal's level, unmeasured. An integer texture's sampler
 /// keeps the descriptor's clamp, its lower bound at least 0.
 ///
 /// Refusals are [`check_sampler`]'s, for the descriptor's shape and the use.
@@ -1013,37 +1011,6 @@ impl SamplerWord {
         | Self::ADDRESS[1]
         | Self::ADDRESS[2]
         | Self::BORDER;
-    /// The bits of a sampler whose nearest sample reads one texel of the base level at Metal's
-    /// position: the word masked by them is 0 exactly for a sampler with normalized coordinates,
-    /// nearest min and mag filters, no mip filter, and no anisotropy (whose `VkSampler` reads the
-    /// base level whatever its LOD clamps, `vk_sampler`).
-    pub const NEAREST_BASE: u32 = Self::PIXEL_COORDINATES
-        | Self::MIN_LINEAR
-        | Self::MAG_LINEAR
-        | Self::MIP_FILTER
-        | Self::ANISOTROPIC;
-    /// The fields a snapped nearest sample reads of a runtime sampler: whether it reads the base
-    /// level ([`NEAREST_BASE`](Self::NEAREST_BASE)) and its address modes.
-    pub const NEAREST_SNAP: u32 =
-        Self::NEAREST_BASE | Self::ADDRESS[0] | Self::ADDRESS[1] | Self::ADDRESS[2];
-    /// The bits of a sampler whose nearest sample at a level the shader knows reads one texel of
-    /// one level: the word masked by them is 0 exactly for a sampler with normalized coordinates,
-    /// nearest min and mag filters, no anisotropy, and no mip filter or a nearest one
-    /// (`MTLSamplerMipFilter`'s values 0 and 1).
-    pub const NEAREST_LEVEL: u32 = Self::NEAREST_BASE & !(1 << Self::MIP_FILTER_SHIFT);
-    /// The fields a snapped nearest sample at a level the shader knows reads of a runtime sampler:
-    /// [`NEAREST_SNAP`](Self::NEAREST_SNAP)'s, and the levels its clamp leaves.
-    pub const LEVELED_SNAP: u32 = Self::NEAREST_SNAP | Self::LEVEL_MIN | Self::LEVEL_MAX;
-    /// The fields a sample's level reads of a runtime sampler: whether the sampler takes its level
-    /// clamp on Metal's grid (normalized coordinates, one filter for minification and
-    /// magnification, no anisotropy, and a mip filter: [`vk_sampler`] then holds the clamp on that
-    /// grid for a texture whose texels it filters), and its mip filter.
-    pub const LEVEL_RULE: u32 = Self::PIXEL_COORDINATES
-        | Self::MIN_LINEAR
-        | Self::MAG_LINEAR
-        | Self::MIP_FILTER
-        | Self::ANISOTROPIC;
-
     /// The word of `desc`.
     pub fn of(desc: &SamplerDescriptor) -> SamplerWord {
         let mut w = 0;
@@ -2245,13 +2212,11 @@ mod tests {
         );
     }
 
-    /// A word masked by `NEAREST_BASE` is 0 exactly for a normalized, nearest, unmipmapped,
-    /// isotropic sampler, whatever its address modes, border, comparison, reduction, and LOD
-    /// clamps; `NEAREST_SNAP` adds the address modes. A sampler's word holds the levels a nearest
-    /// mip filter reads at its clamp (the default clamp's are the word 0's), and a sampler taking
-    /// one filter both ways, isotropic, of a filtered texture, takes its clamp on Metal's grid: a
-    /// nearest mip filter's those levels, a linear one's the bounds truncated onto sixty-fourths.
-    /// Every other sampler keeps its clamp as given.
+    /// A sampler's word holds the levels a nearest mip filter reads at its clamp (the default
+    /// clamp's are the word 0's), and a sampler taking one filter both ways, isotropic, of a
+    /// filtered texture, takes its clamp on Metal's grid: a nearest mip filter's those levels, a
+    /// linear one's the bounds truncated onto sixty-fourths. Every other sampler keeps its clamp as
+    /// given.
     #[test]
     fn a_samplers_clamp_is_metals_on_its_level_grid() {
         let levels = SamplerWord::LEVEL_MIN | SamplerWord::LEVEL_MAX;
@@ -2362,40 +2327,6 @@ mod tests {
                     assert_eq!(device, metal, "{what} at {l}");
                 }
             }
-        }
-    }
-
-    #[test]
-    fn a_sampler_word_answers_whether_a_nearest_sample_reads_the_base_level() {
-        use SamplerMinMagFilter as F;
-        let base = |d: &SamplerDescriptor| SamplerWord::of(d).0 & SamplerWord::NEAREST_BASE == 0;
-        let mut d = metal_default();
-        assert!(base(&d));
-        d.s_address_mode = SamplerAddressMode::Repeat;
-        d.t_address_mode = SamplerAddressMode::MirrorRepeat;
-        d.border_color = SamplerBorderColor::OpaqueWhite;
-        d.compare_function = CompareFunction::Less;
-        d.reduction_mode = SamplerReductionMode::Minimum;
-        d.lod_min_clamp = 2.0;
-        d.lod_max_clamp = 3.0;
-        assert!(base(&d));
-        let mode = |d: &SamplerDescriptor, axis: usize| {
-            (SamplerWord::of(d).0 & SamplerWord::NEAREST_SNAP) >> SamplerWord::ADDRESS_SHIFT[axis]
-                & 0b111
-        };
-        assert_eq!(mode(&d, 0), SamplerAddressMode::Repeat.as_raw());
-        assert_eq!(mode(&d, 1), SamplerAddressMode::MirrorRepeat.as_raw());
-        let not_base: [&dyn Fn(&mut SamplerDescriptor); 5] = [
-            &|d| d.normalized_coordinates = false,
-            &|d| d.min_filter = F::Linear,
-            &|d| d.mag_filter = F::Linear,
-            &|d| d.mip_filter = SamplerMipFilter::Nearest,
-            &|d| d.max_anisotropy = 2,
-        ];
-        for (k, edit) in not_base.iter().enumerate() {
-            let mut d = metal_default();
-            edit(&mut d);
-            assert!(!base(&d), "edit {k}");
         }
     }
 

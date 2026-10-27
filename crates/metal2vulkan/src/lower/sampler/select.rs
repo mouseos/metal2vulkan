@@ -2536,7 +2536,7 @@ fn pixel_note(
     use super::position::SnapKind;
     use crate::lower::select::{both, NoteClause};
     let always = || vec![NoteClause::new()];
-    let gathered = snap.is_some_and(|s| matches!(s.kind, SnapKind::WordGather { .. }));
+    let gathered = snap.is_some_and(|s| matches!(s.kind, SnapKind::WordGather));
     match pixel {
         Pixel::None => Vec::new(),
         Pixel::Always if centred || snap.is_some_and(|s| !s.by_word()) => Vec::new(),
