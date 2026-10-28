@@ -9,19 +9,35 @@ import struct
 
 MAX_WORDS = 8192
 LINE = re.compile(r'm2vspv1 (begin|data|end) pid=(\d+) id=(\d+) (.*)')
-FRAGMENT = re.compile(r'sc([0-9a-f]{8})([0-9a-f]{8})([0-9a-f]{4})([0-9a-f]{4}):([^\r\n]*)')
+FRAGMENT = re.compile(r'sc([0-9a-f]{8})([0-9a-f]{8})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{8}):([^\r\n]*)')
+
+def checksum(pid, ident, count, stage, entry, data):
+    h = hashlib.sha256(b'm2vspv1\0')
+    h.update(struct.pack('<IQI', pid, ident, count))
+    for field in (stage.encode('utf-8'), entry.encode('utf-8'), b'missing'):
+        h.update(struct.pack('<I', len(field)))
+        h.update(field)
+    h.update(data)
+    return h.hexdigest()
+
 
 def reassemble(lines):
     groups = {}
     for line in lines:
         match = FRAGMENT.search(line)
         if not match:
-            yield line
+            yield line, None
             continue
-        pid, sequence, index, count, data = match.groups()
+        pid, sequence, index, count, check, data = match.groups()
+        material = f'sc{pid}{sequence}{index}{count}:{data}'.encode('ascii')
+        fnv = 2166136261
+        for byte in material:
+            fnv = ((fnv ^ byte) * 16777619) & 0xffffffff
+        if fnv != int(check, 16):
+            raise ValueError('UART fragment checksum mismatch')
         key = (pid, sequence)
         index, count = int(index, 16), int(count, 16)
-        if not 0 < count <= 64 or index >= count or len(data) > 35:
+        if not 0 < count <= 64 or index >= count or len(data) > 27:
             raise ValueError('invalid UART fragment')
         group = groups.setdefault(key, {'count': count, 'parts': {}, 'done': False})
         if group['count'] != count or group['done'] or index in group['parts']:
@@ -29,19 +45,23 @@ def reassemble(lines):
         group['parts'][index] = data
         if len(group['parts']) == count:
             group['done'] = True
-            yield ''.join(group['parts'][part] for part in range(count))
+            yield ''.join(group['parts'][part] for part in range(count)), int(pid, 16)
     if any(not group['done'] for group in groups.values()):
         raise ValueError('incomplete UART fragment group')
 
 
 def decode(lines):
     frames = {}
-    for line in reassemble(lines):
+    for line, outer_pid in reassemble(lines):
         match = LINE.search(line)
         if not match:
             continue
         kind, pid, ident, fields = match.groups()
         key = (int(pid), int(ident))
+        if key[0] > 0xffffffff or key[1] > 0xffffffffffffffff:
+            raise ValueError('invalid identity')
+        if outer_pid is not None and key[0] != outer_pid:
+            raise ValueError('UART sender PID mismatch')
         parts = fields.split()
         if any('=' not in part for part in parts):
             raise ValueError('malformed fields')
@@ -54,6 +74,8 @@ def decode(lines):
             count = int(attrs['words'])
             if not 5 <= count <= MAX_WORDS or not re.fullmatch('[0-9a-f]{64}', attrs['sha256']):
                 raise ValueError('invalid size or digest')
+            if attrs.get('pipeline') != 'missing' or not re.fullmatch('[A-Za-z0-9_]+', attrs.get('stage', '')):
+                raise ValueError('invalid stage or pipeline metadata')
             entry = bytes.fromhex(attrs['entryhex']).decode('utf-8')
             if len(entry.encode()) > 256:
                 raise ValueError('entry too long')
@@ -86,7 +108,7 @@ def decode(lines):
             if offset != len(data) // 4:
                 raise ValueError('missing or overlapping chunk')
             data.extend(f['chunks'][offset])
-        if len(data) != 4 * f['count'] or hashlib.sha256(data).hexdigest() != f['meta']['sha256']:
+        if len(data) != 4 * f['count'] or checksum(pid, ident, f['count'], f['meta']['stage'], f['entry'], data) != f['meta']['sha256']:
             raise ValueError('length or digest mismatch')
         if struct.unpack_from('<I', data)[0] != 0x07230203:
             raise ValueError('bad SPIR-V magic')

@@ -16,14 +16,23 @@ creation, invalid or oversized module causes a silent drop. The worker emits fra
 writes them to stderr when no callback is registered. The a04br3 diagnostic
 constructor registers the existing `native_metal_board_text` transport and
 fragments each record into lines at most 63 characters long. Delivery of a
-complete shader through that route has not been tested on the device. A
+complete shader through that route has not been tested on the device. The
+board transport deliberately returns no delivery acknowledgement; if all
+records are lost, that is indistinguishable from no capture. Its current UART
+path issues a synchronous IOKit open for each character and can impose very
+large CPU and logging costs, even from the background worker. Do not use it
+for performance measurements or deploy it before measuring that impact. A
 process can exit before flushing, and diagnostic CPU and logging can perturb
 timing. Do not enable the feature in distributable images by default.
 
 Pass a log from exactly one boot to `python3 scripts/shader-capture/decode.py
 <log> <new-host-output-directory>`. The decoder refuses missing, duplicated,
-interleaved incorrectly, truncated or corrupted records, validates the
-SHA-256, and writes SPIR-V plus a manifest on the host. Shader data is private
+interleaved incorrectly, truncated or corrupted records, validates a SHA-256 over the sender PID, capture ordinal, word count, stage,
+entry point, pipeline marker and SPIR-V bytes, and writes SPIR-V plus a manifest
+on the host. Each UART fragment also has an FNV-1a checksum over its outer PID,
+sequence, part numbers and payload; the outer and inner PIDs must match. These
+are corruption checks, not authentication against a sender that can recompute
+them. Shader data is private
 input and is not to be committed. The PID and ordinal do not distinguish
 boots by themselves; the caller must segment the log first.
 

@@ -46,6 +46,14 @@ fn frame(
         return false;
     }
     let mut digest = Sha256::new();
+    digest.update(b"m2vspv1\0");
+    digest.update(pid.to_le_bytes());
+    digest.update((id as u64).to_le_bytes());
+    digest.update((words.len() as u32).to_le_bytes());
+    for field in [stage.as_bytes(), entry.as_bytes(), b"missing".as_slice()] {
+        digest.update((field.len() as u32).to_le_bytes());
+        digest.update(field);
+    }
     for word in words {
         digest.update(word.to_le_bytes());
     }

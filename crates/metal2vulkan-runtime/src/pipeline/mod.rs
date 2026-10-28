@@ -43,8 +43,6 @@ mod attachment_formats;
 pub(super) mod budget;
 pub(super) mod content_keyed;
 mod creation_log;
-#[cfg(feature = "shader-capture")]
-mod shader_capture;
 mod dispatch_making;
 mod graphics;
 mod indirect_arguments;
@@ -61,6 +59,8 @@ mod predicted;
 mod raster_samples;
 pub(super) mod reaper;
 mod render;
+#[cfg(feature = "shader-capture")]
+mod shader_capture;
 mod sources;
 pub(super) mod stand_in;
 mod texture_access;
