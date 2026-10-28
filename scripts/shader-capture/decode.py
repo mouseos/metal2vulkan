@@ -10,7 +10,7 @@ import struct
 MAX_WORDS = 8192
 LINE = re.compile(r'm2vspv1 (begin|data|end) pid=(\d+) id=(\d+) (.*)')
 FRAGMENT = re.compile(r'sc([0-9a-f]{8})([0-9a-f]{8})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{8}):([^\r\n]*)')
-FRAGMENT_CANDIDATE = re.compile(r'(?:^|powervr-metal\[[^]\r\n]+\]:\s*)sc')
+FRAGMENT_CANDIDATE = re.compile(r'(?<![A-Za-z0-9])sc(?=(?:[0-9]|[a-z][0-9a-f]{6,}|$))')
 
 def checksum(pid, ident, count, stage, entry, data):
     h = hashlib.sha256(b'm2vspv1\0')
@@ -26,7 +26,7 @@ def reassemble(lines):
     groups = {}
     for line in lines:
         candidate = FRAGMENT_CANDIDATE.search(line)
-        match = FRAGMENT.match(line, candidate.end() - 2) if candidate else FRAGMENT.search(line)
+        match = FRAGMENT.match(line, candidate.start()) if candidate else None
         if not match:
             if candidate:
                 raise ValueError('malformed UART fragment header')

@@ -57,6 +57,12 @@ class DecodeTest(unittest.TestCase):
         corrupted[0] = corrupted[0].replace(': sc', ': sc00000038sc', 1)
         with self.assertRaises(ValueError):
             decode(corrupted)
+        corrupted[0] = corrupted[0].replace('powervr-metal[backboardd]: ', '[kernel] ')
+        with self.assertRaises(ValueError):
+            decode(corrupted)
+    def test_ignores_unrelated_scanout_message(self):
+        lines = self.uart((self.begin, self.data, self.end))
+        self.assertEqual(decode(['powervr-metal[backboardd]: scanout enabled'] + lines)[0][3], self.expected)
     def test_rejects_changed_metadata(self):
         for begin in (self.begin.replace('stage=Vertex', 'stage=Fragment'),
                       self.begin.replace('entryhex=6d61696e', 'entryhex=666f6f'),
