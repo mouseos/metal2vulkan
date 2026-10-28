@@ -404,8 +404,8 @@ pub(crate) fn among<F: Copy + Ord>(
 /// components. One row per GPU, as measured. Measured not to have it, so not listed: lavapipe, Mesa
 /// 26.0.8 on LLVM 21.1.8, arm64 (the linux-gate container, the same lane), whose reciprocal product
 /// reads codes of every format but `Int1010102Normalized` one `f32` ulp off Metal's (126 of the 256
-/// codes of `UCharNormalized`, 512 of the 65,536 of `UShortNormalized`), and per instance a signed
-/// format's most negative code unclamped (-128/127, where Metal reads -1).
+/// codes of `UCharNormalized`, 512 of the 65,536 of `UShortNormalized`), and per instance the most
+/// negative code of an 8- or 16-bit signed format unclamped (-128/127, where Metal reads -1).
 ///
 /// Another driver has none of them, as Vulkan states, and a listed driver on another vendor's GPU
 /// (or another GPU than a row's) is unmeasured: the profile then takes each one's route without

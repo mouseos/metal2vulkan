@@ -1560,13 +1560,13 @@ pub enum PrecisionNote {
     /// code (Mesa 26.0.8 on LLVM 21.1.8, arm64), every normalized format is within one ulp of
     /// Metal's per vertex (some 8-bit unsigned codes one ulp high, 127 as `0x3EFEFF00` where Metal
     /// reads `0x3EFEFEFF`; some 16-bit, signed and `UInt1010102Normalized` codes one ulp low;
-    /// `Int1010102Normalized` Metal's), and per instance a signed format's most negative code reads
-    /// unclamped, `-2^(b-1) / (2^(b-1) - 1)` (-128 of an 8-bit field as -1.0079, -32768 of a
-    /// 16-bit one as -1.00003), where Metal reads -1. RADV's unsigned formats are Metal's at the
-    /// sites measured, its signed ones unmeasured. A 16-bit format read as `half`
-    /// within one `half` ulp of Metal's, on a device whose `float` is Metal's: its `float`
-    /// quotient rounded to `half` again differs at codes 65455 and 65519 unsigned, 32759 and
-    /// -32759 signed. Validation derives no tolerance from it.
+    /// `Int1010102Normalized` Metal's), and per instance the most negative code of an 8- or 16-bit
+    /// signed format reads unclamped, `-2^(b-1) / (2^(b-1) - 1)` (-128 as -1.0079, -32768 as
+    /// -1.00003), where Metal reads -1. RADV's unsigned formats are Metal's at the sites measured,
+    /// its signed ones unmeasured. A 16-bit format read as `half` within one `half` ulp of Metal's,
+    /// on a device whose `float` is Metal's: its `float` quotient rounded to `half` again differs
+    /// at codes 65455 and 65519 unsigned, 32759 and -32759 signed. Validation derives no tolerance
+    /// from it.
     DeviceVertexConversion,
     /// Native half rounding (a conversion): the module rounds a `half` result it computes in
     /// `float` (a `half` operation's, a function's, a conversion from `float`'s, a texel's) by
