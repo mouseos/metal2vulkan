@@ -13,11 +13,13 @@ const MAX_WORDS: usize = 8192;
 const MAX_CAPTURES: usize = 4;
 const CHUNK_WORDS: usize = 32;
 static OBSERVED: AtomicUsize = AtomicUsize::new(0);
-static OUTPUT: OnceLock<extern "C" fn(*const c_char)> = OnceLock::new();
+static OUTPUT: OnceLock<extern "C" fn(*const c_char) -> i32> = OnceLock::new();
 
 /// Set the optional diagnostic transport. An already-registered transport remains in use.
 #[no_mangle]
-pub extern "C" fn metal2vulkan_shader_capture_set_output(output: extern "C" fn(*const c_char)) {
+pub extern "C" fn metal2vulkan_shader_capture_set_output(
+    output: extern "C" fn(*const c_char) -> i32,
+) {
     let _ = OUTPUT.set(output);
 }
 
@@ -40,7 +42,7 @@ fn frame(
     stage: &str,
     pid: u32,
     id: usize,
-    mut emit: impl FnMut(String),
+    mut emit: impl FnMut(String) -> bool,
 ) -> bool {
     if words.len() > MAX_WORDS || words.len() < 5 || words[0] != 0x0723_0203 || entry.len() > 256 {
         return false;
@@ -58,22 +60,25 @@ fn frame(
         digest.update(word.to_le_bytes());
     }
     let sha = hex(&digest.finalize());
-    emit(format!("m2vspv1 begin pid={pid} id={id} words={} sha256={sha} stage={stage} entryhex={} pipeline=missing", words.len(), hex(entry.as_bytes())));
+    if !emit(format!("m2vspv1 begin pid={pid} id={id} words={} sha256={sha} stage={stage} entryhex={} pipeline=missing", words.len(), hex(entry.as_bytes()))) {
+        return false;
+    }
     for (offset, chunk) in words.chunks(CHUNK_WORDS).enumerate() {
         let mut data = String::with_capacity(chunk.len() * 8);
         for word in chunk {
             data.push_str(&hex(&word.to_le_bytes()));
         }
-        emit(format!(
+        if !emit(format!(
             "m2vspv1 data pid={pid} id={id} offset={} hex={data}",
             offset * CHUNK_WORDS
-        ));
+        )) {
+            return false;
+        }
     }
     emit(format!(
         "m2vspv1 end pid={pid} id={id} words={} sha256={sha}",
         words.len()
-    ));
-    true
+    ))
 }
 
 struct Captured {
@@ -81,6 +86,21 @@ struct Captured {
     entry: String,
     stage: String,
     id: usize,
+}
+
+fn worker(recv: mpsc::Receiver<Captured>, mut output: impl FnMut(String) -> bool) {
+    while let Ok(capture) = recv.recv() {
+        if !frame(
+            &capture.words,
+            &capture.entry,
+            &capture.stage,
+            std::process::id(),
+            capture.id,
+            &mut output,
+        ) {
+            break;
+        }
+    }
 }
 
 fn sender() -> Option<&'static mpsc::SyncSender<Captured>> {
@@ -91,24 +111,17 @@ fn sender() -> Option<&'static mpsc::SyncSender<Captured>> {
             std::thread::Builder::new()
                 .name("m2v-spirv-capture".into())
                 .spawn(move || {
-                    while let Ok(capture) = recv.recv() {
-                        frame(
-                            &capture.words,
-                            &capture.entry,
-                            &capture.stage,
-                            std::process::id(),
-                            capture.id,
-                            |line| {
-                                if let Some(callback) = OUTPUT.get() {
-                                    if let Ok(line) = CString::new(line) {
-                                        callback(line.as_ptr());
-                                    }
-                                } else {
-                                    let _ = writeln!(std::io::stderr().lock(), "{line}");
-                                }
-                            },
-                        );
-                    }
+                    worker(recv, |line| {
+                        if let Some(callback) = OUTPUT.get() {
+                            if let Ok(line) = CString::new(line) {
+                                callback(line.as_ptr()) == 0
+                            } else {
+                                false
+                            }
+                        } else {
+                            writeln!(std::io::stderr().lock(), "{line}").is_ok()
+                        }
+                    })
                 })
                 .ok()
                 .map(|_| send)
@@ -155,16 +168,52 @@ mod tests {
     fn host_roundtrip_fixture() {
         let mut words = vec![0x0723_0203, 0x0001_0500, 0, 128, 0];
         words.extend(0..100);
-        assert!(frame(&words, "main", "Vertex", 99, 7, |line| println!(
-            "{line}"
-        )));
+        assert!(frame(&words, "main", "Vertex", 99, 7, |line| {
+            println!("{line}");
+            true
+        }));
+    }
+
+    #[test]
+    fn output_failure_stops_worker_and_queued_capture() {
+        let (send, recv) = mpsc::sync_channel(2);
+        for id in 0..2 {
+            send.send(Captured {
+                words: Arc::from([0x0723_0203, 0x0001_0500, 0, 8, 0]),
+                entry: "main".into(),
+                stage: "Vertex".into(),
+                id,
+            })
+            .unwrap();
+        }
+        drop(send);
+        let mut calls = 0;
+        worker(recv, |_| {
+            calls += 1;
+            calls != 2
+        });
+        assert_eq!(calls, 2);
+    }
+
+    #[test]
+    fn output_failure_stops_remaining_frame() {
+        let words = [0x0723_0203, 0x0001_0500, 0, 8, 0, 0x0102_0304];
+        let mut calls = 0;
+        assert!(!frame(&words, "main", "Vertex", 10, 3, |_| {
+            calls += 1;
+            calls != 2
+        }));
+        assert_eq!(calls, 2);
     }
 
     #[test]
     fn bounded_framing_preserves_little_endian_words() {
         let words = [0x0723_0203, 0x0001_0500, 0, 8, 0, 0x0102_0304];
         let mut lines = Vec::new();
-        assert!(frame(&words, "main", "Vertex", 10, 3, |line| lines.push(line)));
+        assert!(frame(&words, "main", "Vertex", 10, 3, |line| {
+            lines.push(line);
+            true
+        }));
         assert_eq!(lines.len(), 3);
         assert!(lines[0].contains("entryhex=6d61696e pipeline=missing"));
         assert!(lines[1].ends_with("030223070005010000000000080000000000000004030201"));
@@ -176,7 +225,10 @@ mod tests {
             "Vertex",
             10,
             4,
-            |line| lines.push(line)
+            |line| {
+                lines.push(line);
+                true
+            }
         ));
         assert!(lines.is_empty());
     }

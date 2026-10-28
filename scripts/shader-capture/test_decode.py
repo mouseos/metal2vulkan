@@ -47,6 +47,10 @@ class DecodeTest(unittest.TestCase):
         malformed = lines[0].replace('sc00000038', 'scz0000038', 1)
         with self.assertRaises(ValueError):
             decode(lines + [malformed])
+    def test_rejects_short_truncated_header_after_complete_capture(self):
+        lines = self.uart((self.begin, self.data, self.end))
+        with self.assertRaises(ValueError):
+            decode(lines + ['powervr-metal[backboardd]: sc00000038'])
     def test_rejects_changed_metadata(self):
         for begin in (self.begin.replace('stage=Vertex', 'stage=Fragment'),
                       self.begin.replace('entryhex=6d61696e', 'entryhex=666f6f'),
