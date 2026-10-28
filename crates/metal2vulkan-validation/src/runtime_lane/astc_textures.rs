@@ -452,7 +452,8 @@ fn off_metal(decode: AstcDecode, got: &[[f32; 4]], blocks: &[&[u8]]) -> usize {
 /// texels of the new blocks; one held behind the busy kernel, submitted before the write, reads
 /// each texel as Metal decodes the old or the new blocks (the call waits for no decode, a race
 /// Metal's contract leaves to the program); a command buffer committed after it reads the new
-/// ones. The device announces `cpu-block-decode` once where any write decoded on the CPU
+/// ones. Each case's two writes are exactly two CPU decodes where its copies go on the host or
+/// the staging queue, and none elsewhere, counted from before the texture's making. The device announces `cpu-block-decode` once where any write decoded on the CPU
 /// ([`CPU_DECODES`]). `ASTCBEHIND` prints each case's route; a case behind the kernel whose reader
 /// ran before the write is void (lavapipe runs a submission inside `vkQueueSubmit`).
 #[test]
@@ -514,6 +515,11 @@ fn astc_cpu_writes_decode_on_the_cpu() {
                     seeded_blocks(seed + 1, count),
                     seeded_blocks(seed + 2, count),
                 );
+                // Counted from before the making: every earlier case's decodes landed before
+                // its later reader completed, and both writes' decodes here land before this
+                // case's later reader runs (the decode thread takes its jobs in order, and counts
+                // each before it lets the batches that wait for it go).
+                let made = device.work_counts();
                 let target = texture(device, pf, TextureUsage::SHADER_READ);
                 target.replace_region(whole, 0, 0, &old, row, 0).unwrap();
                 let out = buffer_with(device, &[0; 16 * 16 * 16]).unwrap();
@@ -530,7 +536,6 @@ fn astc_cpu_writes_decode_on_the_cpu() {
                         (None, reads)
                     }
                 };
-                let before = device.work_counts();
                 target.replace_region(whole, 0, 0, &new, row, 0).unwrap();
                 let ran = spin
                     .as_ref()
@@ -549,7 +554,8 @@ fn astc_cpu_writes_decode_on_the_cpu() {
                 let later = read_after(&queue, &state, &target, &later_out, None);
                 later.wait_until_completed_for(WAIT).unwrap();
                 assert_eq!(later.error(), None, "{pf:?} {behind:?}: the later reader");
-                let cpu = device.work_counts().cpu_block_decodes - before.cpu_block_decodes;
+                let cpu = device.work_counts().cpu_block_decodes - made.cpu_block_decodes;
+                let writes = if routed { 2 } else { 0 };
                 eprintln!(
                     "ASTCBEHIND {name} {pf:?} {behind:?}: routed {routed}, {cpu} CPU decodes{}",
                     if ran {
@@ -558,8 +564,10 @@ fn astc_cpu_writes_decode_on_the_cpu() {
                         ""
                     }
                 );
-                if routed && cpu != 1 {
-                    wrong.push(format!("{pf:?} {behind:?}: {cpu} CPU decodes, not 1"));
+                if cpu != writes {
+                    wrong.push(format!(
+                        "{pf:?} {behind:?}: {cpu} CPU decodes of its two writes, not {writes}"
+                    ));
                 }
                 match (ran, behind) {
                     (true, Behind::Event) => {
