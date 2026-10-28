@@ -2126,8 +2126,9 @@ degradations! {
         /// pipeline's `half` results computed in `float` on every device without `shaderFloat16`,
         /// its quantize measured or not; an integer's `half` rounds exactly. Recorded bound: a
         /// finite result within one unit in the last place of the `half`; 65504 to 65520 possibly
-        /// infinity where Metal answers 65504; a result below `2^-14` possibly a zero of either
-        /// sign where Metal answers the `half` denormal; a NaN's encoding the device's.
+        /// infinity where Metal answers 65504; a value below `2^-14` possibly a zero of either
+        /// sign where Metal answers the `half` denormal, or `2^-14` from just below it; a NaN's
+        /// encoding the device's.
         NativeHalfQuantize = "native-half-quantize";
         /// Class: native device maths. The device's NaN answers a `float` or `half` operation's
         /// NaN result where Metal answers a NaN the device is not measured to answer (every NaN

@@ -208,10 +208,10 @@ Metal semantics the translation keeps on every device, beyond Vulkan's: Metal's 
 simdgroups (including lockstep races on threadgroup memory within a barrier interval), and the
 bit-exact `fneg` and `fabs` of a `float`, its NaNs and denormals included. A NaN's bits, the
 operand `fmin`, `fmax`, `min3`, `max3`, `clamp` and `saturate` pick beside a NaN or between two
-zeros, a `half` read from its bits, which is the device's widening wherever the device has
-`shaderFloat16` (a NaN's bits, and a denormal on a device that may flush 16-bit ones), and a
-`half` sum or difference below the smallest normal `half` on a device without `shaderFloat16`
-(its `OpQuantizeToF16`'s zero) are the device's, each recorded as a precision note.
+zeros, a `half` read from its bits, which is the device's widening on every device (a NaN's
+bits, and a denormal on a device that may flush 16-bit ones), and a `half` rounded from a value
+below the smallest normal `half` on a device without `shaderFloat16` (its `OpQuantizeToF16`'s
+zero) are the device's, each recorded as a precision note.
 
 What the runtime enables for itself outside the vocabulary enters no enable set, compile profile
 or fingerprint: among it the extensions of its dma-buf fallback for no-copy memory whose pointer
@@ -2970,8 +2970,8 @@ bound.
   Native half rounding (a quantize): the module rounds a `half` result it computes in `float` (a
   `half` operation's, a function's, a conversion from `float`'s, a texel's) by the device's
   `OpQuantizeToF16` alone, on every device without `shaderFloat16`, its quantize measured or not: a
-  result below the smallest normal `half` may be a zero where Metal answers the half denormal. An
-  integer's `half` rounds exactly instead.
+  value below the smallest normal `half` may round to a zero where Metal answers the half denormal
+  (or `2^-14`, from just below it). An integer's `half` rounds exactly instead.
 - `metal2vulkan-degrade-native-nan-encoding` (precision). `PrecisionNote::NativeNanEncoding`: Native
   device maths: a `float` or `half` operation's NaN result is the device's, its sign and payload
   unselected, where Metal answers a NaN the device is not measured to answer (every NaN but

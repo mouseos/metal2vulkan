@@ -226,8 +226,11 @@ fn excess(what: &str, got: f32, want: f64, bound: f64) -> Option<String> {
 /// Metal answers its canonical `0x7fc00000`), of two numbers correctly rounded, a two-lane `dot`
 /// within `5 * 2^-24 * sum |a_i * b_i|`, a `mix` within `2^-21 * (|x * (1 - t)| + |y * t|)`, and
 /// `fast::sqrt` within Vulkan's `1 / InverseSqrt`, 4.5 ulp, and `saturate` (Metal's
-/// `clamp(x, +0, 1)`) of a NaN zero and of a number that number clamped exactly.
-fn broken(x: &[f32; IN], r: &[f32; OUT]) -> Vec<String> {
+/// `clamp(x, +0, 1)`) of a NaN zero and of a number that number clamped exactly. A `half` fused
+/// multiply-add is within one `half` ulp, or, where the stage rounds `half` natively
+/// (`native_half`: `NativeHalfQuantize` or `NativeHalfConversion`), the zero of its sign below
+/// `2^-14`.
+fn broken(x: &[f32; IN], r: &[f32; OUT], native_half: bool) -> Vec<String> {
     let [s, e, l, a, b, c, hx, hy, hz, n] = x.map(f64::from);
     let products = (c * e).abs() + (s * c).abs();
     let blend = (s * (1.0 - hx)).abs() + (c * hx).abs();
@@ -256,7 +259,10 @@ fn broken(x: &[f32; IN], r: &[f32; OUT]) -> Vec<String> {
         ),
         excess("a / b", r[4], a / b, 2.5 * ulp(a / b)),
         excess("fma", r[5], fused, 0.5 * ulp(product) + 0.5 * ulp(fused)),
-        excess("half fma", r[6], half_fused, half_ulp(half_fused)),
+        match native_half && half_fused.abs() < 2f64.powi(-14) && r[6] == 0.0 {
+            true => None,
+            false => excess("half fma", r[6], half_fused, half_ulp(half_fused)),
+        },
         excess("fmin", r[7], if n.is_nan() { a } else { a.min(n) }, 0.0),
         excess("fmax", r[8], if n.is_nan() { c } else { c.max(n) }, 0.0),
         match n.is_nan() {
@@ -278,8 +284,8 @@ fn broken(x: &[f32; IN], r: &[f32; OUT]) -> Vec<String> {
     .collect()
 }
 
-/// The native kinds of the notes `nm`'s stage records on `device`'s compile device.
-fn stage_kinds(device: &Device, bitcode: &[u8]) -> BTreeSet<Degradation> {
+/// The notes `nm`'s stage records on `device`'s compile device.
+fn stage_notes(device: &Device, bitcode: &[u8]) -> Vec<PrecisionNote> {
     let compile = device.compile_device();
     let budget = Budget::standard();
     let library = Library::from_air(bitcode).unwrap();
@@ -293,8 +299,12 @@ fn stage_kinds(device: &Device, bitcode: &[u8]) -> BTreeSet<Degradation> {
         .compile_compute_pipeline(&descriptor, &budget)
         .unwrap()
         .stage;
-    stage
-        .precision_notes
+    stage.precision_notes.to_vec()
+}
+
+/// The native kinds of [`stage_notes`].
+fn stage_kinds(notes: &[PrecisionNote]) -> BTreeSet<Degradation> {
+    notes
         .iter()
         .copied()
         .filter(|note| NATIVE.contains(note))
@@ -341,7 +351,15 @@ fn native_maths_answers_within_its_recorded_bounds() {
 /// [`native_maths_answers_within_its_recorded_bounds`] on `device`.
 fn answers_under(device: &Device, messages: &Messages, bitcode: &[u8]) {
     let name = device.name().to_string();
-    let expected = stage_kinds(device, bitcode);
+    let notes = stage_notes(device, bitcode);
+    let expected = stage_kinds(&notes);
+    // A `half` the device rounds natively may be the zero of its sign below `2^-14`.
+    let native_half = notes.iter().any(|note| {
+        matches!(
+            note,
+            PrecisionNote::NativeHalfQuantize | PrecisionNote::NativeHalfConversion
+        )
+    });
     let compile = device.compile_device();
     let takes = |d| compile.profile().takes_driver_deviation(d);
     let metals = takes(DriverDeviation::MetalFloatFunctions);
@@ -431,7 +449,11 @@ fn answers_under(device: &Device, messages: &Messages, bitcode: &[u8]) {
         .zip(results.as_chunks::<OUT>().0.iter())
         .enumerate()
     {
-        failures.extend(broken(x, r).into_iter().map(|f| format!("thread {i}: {f}")));
+        failures.extend(
+            broken(x, r, native_half)
+                .into_iter()
+                .map(|f| format!("thread {i}: {f}")),
+        );
         let [_, _, _, a, b, ..] = x.map(f64::from);
         correctly_rounded += u32::from(r[4] == (a / b) as f32);
     }
@@ -489,6 +511,37 @@ entry:
     .to_owned()
 }
 
+/// Whether `got` is within the native half rounding's recorded bound of Metal's `half` of `x`: one
+/// unit in the last place of the `half`, 65504 for an infinity, or a zero for an `x` below `2^-14`
+/// (the quantize tests the value it rounds, so Metal's `2^-14` from just below may be a zero too).
+fn half_within(got: f32, x: f64) -> bool {
+    let want = metal_half(x);
+    (want.is_finite() && (f64::from(got) - want).abs() <= half_ulp(want))
+        || (want.is_infinite() && f64::from(got) == 65504f64.copysign(want))
+        || (x.abs() < 2f64.powi(-14) && got == 0.0)
+}
+
+/// Whether `got` is within the bound ([`half_within`]) of the `half` sum of `a` and `b` each first
+/// rounded to `half` within it: the bound is each rounding's, so a sum of operands the device
+/// rounded an ulp off, or flushed, is the device's sum of those.
+fn half_within_sum(got: f32, a: f64, b: f64) -> bool {
+    let near = |x: f64| -> Vec<f64> {
+        let want = metal_half(x);
+        if want.is_infinite() {
+            return vec![want, 65504f64.copysign(want)];
+        }
+        let ulp = half_ulp(want);
+        let mut v = vec![want, want - ulp, want + ulp];
+        if x.abs() < 2f64.powi(-14) {
+            v.push(0f64.copysign(x));
+        }
+        v
+    };
+    near(a)
+        .iter()
+        .any(|ha| near(b).iter().any(|hb| half_within(got, ha + hb)))
+}
+
 /// Metal's `half(float)` of `x`: to nearest even on the `half` grid, half denormals kept,
 /// infinity from 65520 up.
 fn metal_half(x: f64) -> f64 {
@@ -521,7 +574,8 @@ fn half_operands() -> Vec<[f32; 2]> {
 /// and sum are the bare quantize, measured or not) and the pipeline state announces it, and each
 /// `half` narrowing and sum is within the bound the note records: one unit in the last place of the
 /// `half`, 65504 where Metal answers infinity from 65520 up on a device that rounds toward zero,
-/// and the zero of its sign below `2^-14` on one that flushes 16-bit denormals; or the `float`
+/// and the zero of its sign below `2^-14` on one that flushes 16-bit denormals (or whose quantize
+/// does), the sum's of operands each so rounded ([`half_within_sum`]); or the `float`
 /// computation itself, each rounding the device dropped left out: NVIDIA's (RTX 3090) and
 /// lavapipe's (Mesa 26.2.4 with LLVM 23.1.1; 2526 of 8192 sums Metal's) compilers drop the
 /// conversion pair, so `half(a)` is `a` and the sum `a + b` rounded to `float` once (or of the
@@ -630,11 +684,12 @@ fn half_rounding_answers_within_its_recorded_bound() {
                 ] {
                     let same = got.to_bits() == (want as f32).to_bits();
                     exact += u32::from(same);
-                    let within = same
-                        || (want.is_finite() && (f64::from(got) - want).abs() <= half_ulp(want))
-                        || (want.is_infinite() && f64::from(got) == 65504f64.copysign(want))
-                        || (want.abs() < 2f64.powi(-14) && got == 0.0)
-                        || unrounded.iter().any(|u| u.to_bits() == got.to_bits());
+                    let rounded = match what {
+                        "half(a)" => half_within(got, f64::from(a)),
+                        _ => half_within_sum(got, f64::from(a), f64::from(b)),
+                    };
+                    let within =
+                        same || rounded || unrounded.iter().any(|u| u.to_bits() == got.to_bits());
                     if !((!metal_s && within) || same) {
                         failures.push(format!(
                             "thread {i}: {what} of {a:e}, {b:e}: {got:e} for Metal's {want:e}"

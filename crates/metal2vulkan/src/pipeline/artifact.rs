@@ -1627,10 +1627,11 @@ pub enum PrecisionNote {
     /// specification lets it answer a zero for a magnitude too small for a normal `half`. The
     /// recorded bound, against Metal's `half(float)`: a finite result within one unit in the last
     /// place of the `half`; a value from 65504 up to 65520 may be infinity where Metal's is 65504
-    /// (NVIDIA's 615.71.09 rounds `0x477FEFFF` to infinity); a result below the smallest normal
-    /// `half` (`2^-14`) may be a zero, of either sign, where Metal answers the half denormal (NIR's
-    /// `fquantize2f16` flushes every one); a NaN's encoding is the device's. Validation derives no
-    /// tolerance from it.
+    /// (NVIDIA's 615.71.09 rounds `0x477FEFFF` to infinity); a value below the smallest normal
+    /// `half` (`2^-14`) may round to a zero, of either sign, where Metal answers the half denormal,
+    /// or `2^-14` from just below it (the quantize tests the value it rounds; NIR's
+    /// `fquantize2f16` flushes every one, SwiftShader's too); a NaN's encoding is the device's.
+    /// Validation derives no tolerance from it.
     NativeHalfQuantize,
     /// Native device maths: a `float` or `half` operation's NaN result is the device's, its sign
     /// and payload unselected, where Metal answers a NaN the device is not measured to answer:
