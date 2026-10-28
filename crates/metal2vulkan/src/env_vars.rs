@@ -35,6 +35,16 @@ pub const REGISTRY: &[EnvVar] = &[
                  stores)",
     },
     EnvVar {
+        name: "METAL2VULKAN_CAPTURE_SPIRV",
+        default: "unset (off)",
+        effect: "bounded shader diagnostic; requires the runtime shader-capture feature",
+    },
+    EnvVar {
+        name: "METAL2VULKAN_CAPTURE_SPIRV_START",
+        default: "0",
+        effect: "zero-based shader diagnostic window start",
+    },
+    EnvVar {
         name: "METAL2VULKAN_LOG_PIPELINES",
         default: "unset (off)",
         effect: "metal2vulkan-runtime's diagnostics: one line per render VkPipeline a device \
@@ -74,6 +84,20 @@ pub fn lane_validation() -> Option<OsString> {
 pub fn log_pipelines() -> bool {
     std::env::var_os("METAL2VULKAN_LOG_PIPELINES")
         .is_some_and(|value| !value.is_empty() && value != "0")
+}
+
+/// Whether the optional runtime shader diagnostic exports SPIR-V; exactly `1` enables it.
+pub fn capture_spirv() -> bool {
+    std::env::var_os("METAL2VULKAN_CAPTURE_SPIRV").is_some_and(|value| value == "1")
+}
+
+/// First zero-based shader observation selected for the bounded diagnostic.
+pub fn capture_spirv_start() -> Option<usize> {
+    match std::env::var("METAL2VULKAN_CAPTURE_SPIRV_START") {
+        Ok(value) => value.parse().ok(),
+        Err(std::env::VarError::NotPresent) => Some(0),
+        Err(_) => None,
+    }
 }
 
 /// Optional path override for an external tool `cmd` (`llvm-as`, `spirv-val`, …), read from

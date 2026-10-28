@@ -19,6 +19,9 @@ autoexamples = false
 # The runtime's tests read the repository's profiles, fixtures and guide beside this directory.
 exclude = ["/target/", "**/*.air", "**/*.metallib", "**/*.spv"]
 
+[features]
+shader-capture = []
+
 [lib]
 name = "metal2vulkan_runtime"
 path = "src/lib.rs"

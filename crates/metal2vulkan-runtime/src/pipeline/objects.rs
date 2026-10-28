@@ -559,6 +559,8 @@ impl VariantObjects {
         for (stage, words) in stages.iter().zip(words.iter()) {
             let entry = CString::new(stage.entry_point.as_str())
                 .map_err(|_| internal("an entry point name holds NUL"))?;
+            #[cfg(feature = "shader-capture")]
+            super::shader_capture::capture(stage);
             let module = shader_module(device, &stage.spirv, words)?;
             objects.stages.push(StageObject {
                 stage: stage.stage.into(),
