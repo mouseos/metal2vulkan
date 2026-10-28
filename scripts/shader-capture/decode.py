@@ -9,10 +9,34 @@ import struct
 
 MAX_WORDS = 8192
 LINE = re.compile(r'm2vspv1 (begin|data|end) pid=(\d+) id=(\d+) (.*)')
+FRAGMENT = re.compile(r'sc([0-9a-f]{8})([0-9a-f]{8})([0-9a-f]{4})([0-9a-f]{4}):([^\r\n]*)')
+
+def reassemble(lines):
+    groups = {}
+    for line in lines:
+        match = FRAGMENT.search(line)
+        if not match:
+            yield line
+            continue
+        pid, sequence, index, count, data = match.groups()
+        key = (pid, sequence)
+        index, count = int(index, 16), int(count, 16)
+        if not 0 < count <= 64 or index >= count or len(data) > 35:
+            raise ValueError('invalid UART fragment')
+        group = groups.setdefault(key, {'count': count, 'parts': {}, 'done': False})
+        if group['count'] != count or group['done'] or index in group['parts']:
+            raise ValueError('duplicate or inconsistent UART fragment')
+        group['parts'][index] = data
+        if len(group['parts']) == count:
+            group['done'] = True
+            yield ''.join(group['parts'][part] for part in range(count))
+    if any(not group['done'] for group in groups.values()):
+        raise ValueError('incomplete UART fragment group')
+
 
 def decode(lines):
     frames = {}
-    for line in lines:
+    for line in reassemble(lines):
         match = LINE.search(line)
         if not match:
             continue

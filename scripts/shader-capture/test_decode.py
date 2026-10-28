@@ -18,6 +18,16 @@ class DecodeTest(unittest.TestCase):
         for lines in ([self.begin, self.data], [self.begin, self.data, self.data, self.end], [self.begin, self.data, self.end, self.begin], [self.data, self.end]):
             with self.subTest(lines=lines), self.assertRaises(ValueError):
                 decode(lines)
+    def test_uart_fragments(self):
+        lines = []
+        for seq, record in enumerate((self.begin, self.data, self.end)):
+            parts = [record[i:i + 35] for i in range(0, len(record), 35)]
+            lines.extend(f"powervr-metal[backboardd]: sc00000038{seq:08x}{i:04x}{len(parts):04x}:{part}" for i, part in enumerate(parts))
+        self.assertEqual(decode(lines)[0][3], self.expected)
+        with self.assertRaises(ValueError):
+            decode(lines[:-1])
+        with self.assertRaises(ValueError):
+            decode(lines + lines[:1])
     def test_rejects_changed_payload(self):
         with self.assertRaises(ValueError):
             decode([self.begin, self.data[:-2] + 'ff', self.end])

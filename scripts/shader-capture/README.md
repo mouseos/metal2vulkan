@@ -12,12 +12,13 @@ order can change which stages appear.
 The runtime queues up to four SPIR-V modules of at most 32 KiB each to a
 bounded background worker. It does not write a file, change the shader,
 create a cache, or change a Vulkan return value. A full queue, failed worker
-creation, invalid or oversized module causes a silent drop. The worker writes
-framed hex records to the process's stderr; this process's stderr must be
-collected by a separately verified transport. A sandbox can discard it, a
+creation, invalid or oversized module causes a silent drop. The worker emits framed records through an optional registered callback, or
+writes them to stderr when no callback is registered. The a04br3 diagnostic
+constructor registers the existing `native_metal_board_text` transport and
+fragments each record into lines at most 63 characters long. Delivery of a
+complete shader through that route has not been tested on the device. A
 process can exit before flushing, and diagnostic CPU and logging can perturb
-timing. This has not been tested on the device. Do not assume stderr reaches
-UART and do not enable the feature in distributable images by default.
+timing. Do not enable the feature in distributable images by default.
 
 Pass a log from exactly one boot to `python3 scripts/shader-capture/decode.py
 <log> <new-host-output-directory>`. The decoder refuses missing, duplicated,

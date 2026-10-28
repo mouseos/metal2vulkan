@@ -2,6 +2,7 @@
 //! This is not a complete Vulkan pipeline trace and does not reproduce its state.
 use metal2vulkan::pipeline::StageModule;
 use sha2::{Digest, Sha256};
+use std::ffi::{c_char, CString};
 use std::fmt::Write;
 use std::io::Write as IoWrite;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -12,6 +13,13 @@ const MAX_WORDS: usize = 8192;
 const MAX_CAPTURES: usize = 4;
 const CHUNK_WORDS: usize = 32;
 static OBSERVED: AtomicUsize = AtomicUsize::new(0);
+static OUTPUT: OnceLock<extern "C" fn(*const c_char)> = OnceLock::new();
+
+/// Set the optional diagnostic transport. An already-registered transport remains in use.
+#[no_mangle]
+pub extern "C" fn metal2vulkan_shader_capture_set_output(output: extern "C" fn(*const c_char)) {
+    let _ = OUTPUT.set(output);
+}
 
 fn enabled() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
@@ -76,8 +84,6 @@ fn sender() -> Option<&'static mpsc::SyncSender<Captured>> {
                 .name("m2v-spirv-capture".into())
                 .spawn(move || {
                     while let Ok(capture) = recv.recv() {
-                        let stderr = std::io::stderr();
-                        let mut output = stderr.lock();
                         frame(
                             &capture.words,
                             &capture.entry,
@@ -85,7 +91,13 @@ fn sender() -> Option<&'static mpsc::SyncSender<Captured>> {
                             std::process::id(),
                             capture.id,
                             |line| {
-                                let _ = writeln!(output, "{line}");
+                                if let Some(callback) = OUTPUT.get() {
+                                    if let Ok(line) = CString::new(line) {
+                                        callback(line.as_ptr());
+                                    }
+                                } else {
+                                    let _ = writeln!(std::io::stderr().lock(), "{line}");
+                                }
                             },
                         );
                     }
