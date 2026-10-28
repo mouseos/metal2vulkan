@@ -51,6 +51,8 @@ class DecodeTest(unittest.TestCase):
         lines = self.uart((self.begin, self.data, self.end))
         with self.assertRaises(ValueError):
             decode(lines + ['powervr-metal[backboardd]: sc00000038'])
+        with self.assertRaises(ValueError):
+            decode(lines + ['powervr-metal[backboardd]: scz000'])
     def test_rejects_truncated_header_before_valid_fragment_on_same_line(self):
         lines = self.uart((self.begin, self.data, self.end))
         corrupted = lines.copy()

@@ -10,7 +10,7 @@ import struct
 MAX_WORDS = 8192
 LINE = re.compile(r'm2vspv1 (begin|data|end) pid=(\d+) id=(\d+) (.*)')
 FRAGMENT = re.compile(r'sc([0-9a-f]{8})([0-9a-f]{8})([0-9a-f]{4})([0-9a-f]{4})([0-9a-f]{8}):([^\r\n]*)')
-FRAGMENT_CANDIDATE = re.compile(r'(?<![A-Za-z0-9])sc(?=(?:[0-9]|[a-z][0-9a-f]{6,}|$))')
+FRAGMENT_CANDIDATE = re.compile(r'(?<![A-Za-z0-9])sc(?=(?:[0-9]|[a-z](?:[0-9]|$)|$))')
 
 def checksum(pid, ident, count, stage, entry, data):
     h = hashlib.sha256(b'm2vspv1\0')
