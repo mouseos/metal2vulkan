@@ -517,9 +517,8 @@ fn half_operands() -> Vec<[f32; 2]> {
 }
 
 /// On a device whose float controls do not make its conversion to 16 bits Metal's, the stage
-/// records `NativeHalfConversion` (or `NativeHalfQuantize` without `shaderFloat16`, which its sum,
-/// a bare quantize, records even where the quantize is measured to round as Metal's does) and the
-/// pipeline state announces it, and each
+/// records `NativeHalfConversion` (or `NativeHalfQuantize` without `shaderFloat16`, whose narrowing
+/// and sum are the bare quantize, measured or not) and the pipeline state announces it, and each
 /// `half` narrowing and sum is within the bound the note records: one unit in the last place of the
 /// `half`, 65504 where Metal answers infinity from 65520 up on a device that rounds toward zero,
 /// and the zero of its sign below `2^-14` on one that flushes 16-bit denormals; or the `float`
@@ -529,8 +528,7 @@ fn half_operands() -> Vec<[f32; 2]> {
 /// operands rounded, or rounded itself), exactly. CI's lavapipe (Mesa 26.0.8 with LLVM 21.1.8)
 /// rounds here (8192 of 8192). A device whose float controls make its conversion Metal's (the
 /// module declares `RoundingModeRTE`, `DenormPreserve` and `SignedZeroInfNanPreserve` for 16
-/// bits: ANV and RADV), or whose quantize is measured to be Metal's, records neither and answers
-/// Metal's exactly.
+/// bits: ANV and RADV) records neither and answers Metal's exactly.
 #[test]
 fn half_rounding_answers_within_its_recorded_bound() {
     let bitcode = llvm_assemble_text(&half_kernel()).unwrap();
@@ -543,8 +541,7 @@ fn half_rounding_answers_within_its_recorded_bound() {
         |device, messages| {
             let name = format!("{} half rounding", device.name());
             // A module rounding under the float controls that make the device's conversion
-            // Metal's declares `DenormPreserve` for 16 bits, and so requires its property; one
-            // rounding through a quantize measured to be Metal's requires that fact.
+            // Metal's declares `DenormPreserve` for 16 bits, and so requires its property.
             let required = {
                 let library = Library::from_air(&bitcode).unwrap();
                 let function = FunctionDescriptor::new(library.function("hr").unwrap());
@@ -561,7 +558,6 @@ fn half_rounding_answers_within_its_recorded_bound() {
                 FloatControl::DenormPreserve,
                 FloatWidth::F16,
             ));
-            let measured = required.contains(&VkProperty::MetalHalfQuantize);
             let library = device.new_library_with_air(&bitcode).unwrap();
             let function = library.new_function_with_name("hr").unwrap();
             let descriptor = ComputePipelineDescriptor::new(StageSource::Function(
@@ -575,14 +571,14 @@ fn half_rounding_answers_within_its_recorded_bound() {
                 .filter_map(|kind| kind.precision_note())
                 .filter(|note| kinds.contains(note))
                 .collect();
-            // A sum by the bare quantize leaves a result below the smallest normal `half` to the
-            // device, measured quantize or not.
-            let metal_s =
-                (measured || controlled) && !announced.contains(&PrecisionNote::NativeHalfQuantize);
-            eprintln!(
-                "{name}: measured {measured}, float controls {controlled}; announced \
-                     {announced:?}"
+            // A rounding by the bare quantize leaves a result below the smallest normal `half` to
+            // the device, measured quantize or not: only the float controls answer Metal's.
+            let metal_s = controlled;
+            assert!(
+                !required.contains(&VkProperty::MetalHalfQuantize),
+                "{name}: a quantize requires no fact"
             );
+            eprintln!("{name}: float controls {controlled}; announced {announced:?}");
             assert_eq!(announced.len(), usize::from(!metal_s), "{name}");
             let operands = half_operands();
             let bytes: Vec<u8> = operands
