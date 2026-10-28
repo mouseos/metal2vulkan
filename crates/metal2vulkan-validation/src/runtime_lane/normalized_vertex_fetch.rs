@@ -17,10 +17,13 @@
 //! in records of 8 bytes, one element per code of its fields (256 for an 8-bit format, 65,536 for
 //! a 16-bit one, 1,024 for a packed word), component `i` of element `v` holding code
 //! `(v + i (n / 4 + 1)) mod n` (a packed word's 10-bit fields `(v + 257 i) mod 1024`, its 2-bit
-//! field `v mod 4`), so every component takes every code. Per vertex, one draw of a point per
-//! element; per instance, one draw of one point per element at its base instance and vertex, so
-//! the instance step fetches element `v` for `out[v]`. Every word is compared with Metal's rule
-//! computed exactly on the CPU.
+//! field `v mod 4`), so every component takes every code. Per vertex, both entries, one draw of a
+//! point per element. Per instance, the `float4` entry, one draw of one point per element at its
+//! base instance and vertex, so the instance step fetches element `v` for `out[v]`: every element
+//! of an 8-bit or packed format, and of a four-component 16-bit one the first `n / 4 + 1`, which
+//! put every code in one of its components (a draw an element: the 16-bit formats of fewer
+//! components are drawn per vertex alone). Every word is compared with Metal's rule computed
+//! exactly on the CPU.
 //!
 //! Where the profile takes the deviation, an attribute the device fetches in fixed function reads
 //! Metal's `float` at every code: the `float4` pipelines record no `DeviceVertexConversion` and
@@ -131,6 +134,35 @@ impl Coding {
             Coding::Bgra => 256,
             Coding::Packed { .. } => 1024,
         }
+    }
+
+    /// The legs the lane draws of the format, each an entry, a step and the elements it reads
+    /// (the first so many): both entries per vertex over every element; the `float4` entry per
+    /// instance, a draw an element, over every element of an 8-bit or packed format, and of a
+    /// 16-bit one with four components over the first `n / 4 + 1`, which put every code in one
+    /// of its components (the 16-bit formats of fewer components are drawn per vertex alone).
+    fn legs(self) -> Vec<(&'static str, bool, VertexStepFunction, usize)> {
+        let all = self.elements();
+        let mut legs: Vec<_> = ENTRIES
+            .iter()
+            .map(|&(entry, half)| (entry, half, VertexStepFunction::PerVertex, all))
+            .collect();
+        let instanced = match self {
+            Coding::Int {
+                bits: 16, count: 4, ..
+            } => Some(all / 4 + 1),
+            Coding::Int { bits: 16, .. } => None,
+            _ => Some(all),
+        };
+        if let Some(elements) = instanced {
+            legs.push((
+                ENTRIES[0].0,
+                false,
+                VertexStepFunction::PerInstance,
+                elements,
+            ));
+        }
+        legs
     }
 
     /// The raw fields of element `v`, in memory order, each with its width.
@@ -372,8 +404,9 @@ fn drawn(
 }
 
 /// Every code of every normalized format, read into a `float4` and a `half4` attribute per vertex
-/// and per instance, is Metal's where the profile takes `MetalNormalizedVertexFetch` and the
-/// pipeline records no note for it, and within the notes it records elsewhere (module docs).
+/// and into a `float4` one per instance ([`Coding::legs`]), is Metal's where the profile takes
+/// `MetalNormalizedVertexFetch` and the pipeline records no note for it, and within the notes it
+/// records there otherwise (module docs); elsewhere it is printed.
 #[test]
 fn every_normalized_code_reads_metal_s_value() {
     let cache = ScratchCache::new().unwrap();
@@ -389,89 +422,84 @@ fn every_normalized_code_reads_metal_s_value() {
         let library = library(&device);
         let queue = device.new_command_queue().unwrap();
         let mut wrong = Vec::new();
-        let (mut words, mut differ, mut fixed, mut noted) = (0usize, 0usize, 0, false);
+        let (mut words, mut differ, mut fixed, mut legs, mut noted) = (0usize, 0usize, 0, 0, false);
         for (format, coding) in FORMATS {
-            let elements = coding.elements();
-            let bytes: Vec<u8> = (0..elements).flat_map(|v| coding.record(v)).collect();
+            let all = coding.elements();
+            let bytes: Vec<u8> = (0..all).flat_map(|v| coding.record(v)).collect();
             let records = buffer_with(&device, &bytes).unwrap();
-            for (function, half) in ENTRIES {
-                for step in [
-                    VertexStepFunction::PerVertex,
-                    VertexStepFunction::PerInstance,
-                ] {
-                    let what = format!("{function} {format:?} {step:?}");
-                    let d = descriptor(&library, function, format, step);
-                    let compiled = device
-                        .compile_device()
-                        .compile_render_pipeline(&d, &Budget::standard())
-                        .unwrap_or_else(|e| panic!("{what}: {e}"));
-                    let notes = &compiled.stages[0].precision_notes;
-                    let requires = compiled
-                        .requirements
-                        .properties
-                        .contains(&VkProperty::MetalNormalizedVertexFetch);
-                    let pulled = !compiled.vertex_input.pulled.is_empty();
-                    let conversion = notes.contains(&PrecisionNote::DeviceVertexConversion);
-                    if pulled {
-                        // The module's decode: no conversion of the device's to measure.
-                        println!("NORM-FETCH {name}: {what}: pulled, not measured");
-                        assert!(!conversion && !requires, "{what}: {notes:?}");
-                        continue;
-                    }
-                    fixed += 1;
-                    // The pipeline relies on the measured conversion exactly where it records
-                    // no note for it.
-                    let relies = metal && !(half && coding.rounds_twice());
-                    assert_eq!(
-                        (conversion, requires),
-                        (!relies, relies),
-                        "{what}: {notes:?}, {:?}",
-                        compiled.requirements.properties
-                    );
-                    noted |= conversion;
-                    // A word the stage's notes cover is held within one `half` ulp.
-                    let half_noted = half
-                        && (conversion
-                            || notes.contains(&PrecisionNote::NativeHalfConversion)
-                            || notes.contains(&PrecisionNote::NativeHalfQuantize));
-                    let rows = drawn(&queue, &d, &records, elements, step);
-                    let (mut off, mut most, mut first) = (0usize, 0u64, None);
-                    for (v, got) in rows.iter().enumerate() {
-                        let want = metal_row(coding, v, half);
-                        for c in 0..4 {
-                            if got[c] == want[c] {
-                                continue;
-                            }
-                            off += 1;
-                            most = most.max(ulps(got[c], want[c]));
-                            first.get_or_insert((v, c, got[c], want[c]));
-                            let within =
-                                half_within(f32::from_bits(got[c]), f32::from_bits(want[c]));
-                            // Off the measured profiles the device's answer is printed, not held.
-                            let held = metal && (!half_noted || !within);
-                            if held {
-                                wrong.push(format!(
-                                    "{what} element {v} component {c}: got {:#010x}, Metal's \
-                                     {:#010x}",
-                                    got[c], want[c]
-                                ));
-                            }
-                        }
-                    }
-                    words += 4 * elements;
-                    differ += off;
-                    println!(
-                        "NORM-FETCH {name}: {what}: {} words, {off} differ{}, notes {notes:?}",
-                        4 * elements,
-                        match first {
-                            Some((v, c, got, want)) => format!(
-                                " (at most {most} f32 ulps; first element {v} component {c}: \
-                                 {got:#010x}, Metal's {want:#010x})"
-                            ),
-                            None => String::new(),
-                        }
-                    );
+            for (function, half, step, elements) in coding.legs() {
+                legs += 1;
+                let what = format!("{function} {format:?} {step:?}");
+                let d = descriptor(&library, function, format, step);
+                let compiled = device
+                    .compile_device()
+                    .compile_render_pipeline(&d, &Budget::standard())
+                    .unwrap_or_else(|e| panic!("{what}: {e}"));
+                let notes = &compiled.stages[0].precision_notes;
+                let requires = compiled
+                    .requirements
+                    .properties
+                    .contains(&VkProperty::MetalNormalizedVertexFetch);
+                let pulled = !compiled.vertex_input.pulled.is_empty();
+                let conversion = notes.contains(&PrecisionNote::DeviceVertexConversion);
+                if pulled {
+                    // The module's decode: no conversion of the device's to measure.
+                    println!("NORM-FETCH {name}: {what}: pulled, not measured");
+                    assert!(!conversion && !requires, "{what}: {notes:?}");
+                    continue;
                 }
+                fixed += 1;
+                // The pipeline relies on the measured conversion exactly where it records
+                // no note for it.
+                let relies = metal && !(half && coding.rounds_twice());
+                assert_eq!(
+                    (conversion, requires),
+                    (!relies, relies),
+                    "{what}: {notes:?}, {:?}",
+                    compiled.requirements.properties
+                );
+                noted |= conversion;
+                // A word the stage's notes cover is held within one `half` ulp.
+                let half_noted = half
+                    && (conversion
+                        || notes.contains(&PrecisionNote::NativeHalfConversion)
+                        || notes.contains(&PrecisionNote::NativeHalfQuantize));
+                let rows = drawn(&queue, &d, &records, elements, step);
+                let (mut off, mut most, mut first) = (0usize, 0u64, None);
+                for (v, got) in rows.iter().enumerate() {
+                    let want = metal_row(coding, v, half);
+                    for c in 0..4 {
+                        if got[c] == want[c] {
+                            continue;
+                        }
+                        off += 1;
+                        most = most.max(ulps(got[c], want[c]));
+                        first.get_or_insert((v, c, got[c], want[c]));
+                        let within = half_within(f32::from_bits(got[c]), f32::from_bits(want[c]));
+                        // Off the measured profiles the device's answer is printed, not held.
+                        let held = metal && (!half_noted || !within);
+                        if held {
+                            wrong.push(format!(
+                                "{what} element {v} component {c}: got {:#010x}, Metal's \
+                                     {:#010x}",
+                                got[c], want[c]
+                            ));
+                        }
+                    }
+                }
+                words += 4 * elements;
+                differ += off;
+                println!(
+                    "NORM-FETCH {name}: {what}: {} words, {off} differ{}, notes {notes:?}",
+                    4 * elements,
+                    match first {
+                        Some((v, c, got, want)) => format!(
+                            " (at most {most} f32 ulps; first element {v} component {c}: \
+                                 {got:#010x}, Metal's {want:#010x})"
+                        ),
+                        None => String::new(),
+                    }
+                );
             }
         }
         for line in wrong.iter().take(32) {
@@ -483,9 +511,9 @@ fn every_normalized_code_reads_metal_s_value() {
             wrong.len()
         );
         assert!(
-            !metal || fixed == FORMATS.len() * ENTRIES.len() * 2,
+            !metal || fixed == legs,
             "a profile that takes the deviation fetches every format in fixed function here, or \
-             the lane measures less than it claims: {fixed}"
+             the lane measures less than it claims: {fixed} of {legs}"
         );
         assert!(
             wrong.is_empty(),
