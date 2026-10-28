@@ -39,6 +39,11 @@ class DecodeTest(unittest.TestCase):
         corrupt[0] = corrupt[0][:-1] + ('0' if corrupt[0][-1] != '0' else '1')
         with self.assertRaises(ValueError):
             decode(corrupt)
+    def test_rejects_malformed_header_after_complete_capture(self):
+        lines = self.uart((self.begin, self.data, self.end))
+        malformed = lines[0].replace('sc00000038', 'scz0000038', 1)
+        with self.assertRaises(ValueError):
+            decode(lines + [malformed])
     def test_rejects_changed_metadata(self):
         for begin in (self.begin.replace('stage=Vertex', 'stage=Fragment'),
                       self.begin.replace('entryhex=6d61696e', 'entryhex=666f6f'),
