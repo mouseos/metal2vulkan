@@ -12,11 +12,14 @@ class DecodeTest(unittest.TestCase):
         self.end = f'm2vspv1 end pid=56 id=0 words=6 sha256={sha}'
         self.expected = data
     def test_roundtrip(self):
-        self.assertEqual(decode([self.begin, self.data, self.end])[0][3], self.expected)
+        self.assertEqual(decode([self.begin, self.data, self.end], allow_unframed=True)[0][3], self.expected)
+    def test_unframed_requires_explicit_opt_in(self):
+        with self.assertRaises(ValueError):
+            decode([self.begin, self.data, self.end])
     def test_rejects_incomplete_or_mixed(self):
         for lines in ([self.begin, self.data], [self.begin, self.data, self.data, self.end], [self.begin, self.data, self.end, self.begin], [self.data, self.end]):
             with self.subTest(lines=lines), self.assertRaises(ValueError):
-                decode(lines)
+                decode(lines, allow_unframed=True)
     def uart(self, records, outer_pid=56):
         lines = []
         for seq, record in enumerate(records):
@@ -49,13 +52,13 @@ class DecodeTest(unittest.TestCase):
                       self.begin.replace('entryhex=6d61696e', 'entryhex=666f6f'),
                       self.begin.replace('pipeline=missing', 'pipeline=present')):
             with self.subTest(begin=begin), self.assertRaises(ValueError):
-                decode([begin, self.data, self.end])
+                decode([begin, self.data, self.end], allow_unframed=True)
     def test_rejects_outer_pid_mismatch(self):
         with self.assertRaises(ValueError):
             decode(self.uart((self.begin, self.data, self.end), outer_pid=57))
     def test_rejects_changed_payload(self):
         with self.assertRaises(ValueError):
-            decode([self.begin, self.data[:-2] + 'ff', self.end])
+            decode([self.begin, self.data[:-2] + 'ff', self.end], allow_unframed=True)
 
 if __name__ == '__main__':
     unittest.main()

@@ -34,7 +34,7 @@ sequence, part numbers and payload; the outer and inner PIDs must match. These
 are corruption checks, not authentication against a sender that can recompute
 them. Shader data is private
 input and is not to be committed. The PID and ordinal do not distinguish
-boots by themselves; the caller must segment the log first.
+boots by themselves; the caller must segment the log first. Raw stderr records are rejected by default because they have no independent outer PID. The explicit `--unframed-stderr` option accepts them and marks the manifest as lacking outer PID verification.
 
 These records contain the stage, entry point and exact module bytes only. They
 do not capture descriptor layouts, pipeline specialization, attachment and

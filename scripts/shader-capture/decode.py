@@ -53,7 +53,7 @@ def reassemble(lines):
         raise ValueError('incomplete UART fragment group')
 
 
-def decode(lines):
+def decode(lines, allow_unframed=False):
     frames = {}
     for line, outer_pid in reassemble(lines):
         match = LINE.search(line)
@@ -63,6 +63,8 @@ def decode(lines):
         key = (int(pid), int(ident))
         if key[0] > 0xffffffff or key[1] > 0xffffffffffffffff:
             raise ValueError('invalid identity')
+        if outer_pid is None and not allow_unframed:
+            raise ValueError('capture record lacks UART sender identity')
         if outer_pid is not None and key[0] != outer_pid:
             raise ValueError('UART sender PID mismatch')
         parts = fields.split()
@@ -122,15 +124,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('log', type=Path)
     parser.add_argument('output', type=Path, help='new output directory on the host')
+    parser.add_argument('--unframed-stderr', action='store_true', help='accept raw stderr records without independent outer PID verification')
     args = parser.parse_args()
     with args.log.open(encoding='utf-8', errors='replace') as stream:
-        frames = decode(stream)
+        frames = decode(stream, allow_unframed=args.unframed_stderr)
     args.output.mkdir(parents=True, exist_ok=False)
     manifest = []
     for pid, ident, f, data in frames:
         name = f'pid-{pid}-id-{ident}.spv'
         (args.output / name).write_bytes(data)
-        manifest.append({'file': name, 'pid': pid, 'id': ident, 'entry': f['entry'], 'stage': f['meta']['stage'], 'sha256': f['meta']['sha256'], 'pipeline': 'missing'})
+        manifest.append({'file': name, 'pid': pid, 'id': ident, 'entry': f['entry'], 'stage': f['meta']['stage'], 'sha256': f['meta']['sha256'], 'pipeline': 'missing', 'outer_pid_verified': not args.unframed_stderr})
     (args.output / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     print(f'PASS: {len(frames)} complete captures')
 
