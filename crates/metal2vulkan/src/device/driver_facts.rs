@@ -385,6 +385,23 @@ pub(crate) fn among<F: Copy + Ord>(
 /// `helper_tangle`, `driver_deviations::fragment_simdgroup_lanes_are_metal_s` and the public
 /// render cases) answer Metal's with it.
 ///
+/// `MetalNormalizedVertexFetch`: MoltenVK hands a normalized vertex format to Metal's own vertex
+/// fetch, as the `MTLVertexFormat` of the same layout (`MVKPixelFormats.mm`), so Metal converts
+/// the codes. Metal's own answer, read on the M3 Max under macOS 27.0.1 (MSL of
+/// ours, 2026-10-28) at every code of every component of the 19 normalized formats, per vertex and
+/// per instance, into `float4` and `half4` attributes: the code over its maximum correctly rounded
+/// to `float`, but an `Int1010102Normalized` 10-bit field's, `c` times `float(1 / 511)` rounded to
+/// `float` (96 of the 1,024 codes one `f32` ulp toward zero of the quotient); into a `half`
+/// attribute, the exact quotient rounded once to `half`. The gate lane
+/// `runtime_lane::normalized_vertex_fetch` reads every code of every component of the 19 formats
+/// through MoltenVK 1.4.2 on the M3 Max (macOS 27.0.1, 2026-10-28), per vertex and per instance,
+/// against that rule computed exactly on the CPU: all 4,229,120 `float4` words Metal's, and of the
+/// 4,229,120 `half4` words every one but 80 of the 16-bit formats' (40 a step), at codes 65455 and
+/// 65519 unsigned and 32759 and -32759 signed, whose `float` the module rounds to `half` again (one
+/// `half` ulp; noted there). The committed recordings of `vertex-format-float4`, `-half4` and `-instance-step` (the
+/// M3 Max, macOS 27.0.1) hold the same rule at all 1,872 of their normalized components. One row
+/// per GPU, as measured.
+///
 /// Another driver has none of them, as Vulkan states, and a listed driver on another vendor's GPU
 /// (or another GPU than a row's) is unmeasured: the profile then takes each one's route without
 /// it, which the deviation's docs name (`derive.rs`).
@@ -606,6 +623,10 @@ pub(crate) const DEVIATIONS: &[Measured<DriverDeviation>] = &[
     Measured {
         device: Some(APPLE9),
         ..moltenvk_on_apple(DriverDeviation::MetalFullQuads)
+    },
+    Measured {
+        device: Some(APPLE9),
+        ..moltenvk_on_apple(DriverDeviation::MetalNormalizedVertexFetch)
     },
 ];
 
