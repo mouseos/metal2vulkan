@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import struct
 import unittest
-from decode import checksum, decode
+from decode import checksum, decode, reassemble
 
 class DecodeTest(unittest.TestCase):
     def setUp(self):
@@ -42,6 +42,9 @@ class DecodeTest(unittest.TestCase):
         corrupt[0] = corrupt[0][:-1] + ('0' if corrupt[0][-1] != '0' else '1')
         with self.assertRaises(ValueError):
             decode(corrupt)
+    def test_valid_hex_pid_starting_with_letters(self):
+        records = list(reassemble(self.uart((self.begin,), outer_pid=0xab123456)))
+        self.assertEqual(records, [(self.begin, 0xab123456)])
     def test_rejects_malformed_header_after_complete_capture(self):
         lines = self.uart((self.begin, self.data, self.end))
         malformed = lines[0].replace('sc00000038', 'scz0000038', 1)

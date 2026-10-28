@@ -26,7 +26,7 @@ def reassemble(lines):
     groups = {}
     for line in lines:
         candidate = FRAGMENT_CANDIDATE.search(line)
-        match = FRAGMENT.match(line, candidate.start()) if candidate else None
+        match = FRAGMENT.match(line, candidate.start()) if candidate else FRAGMENT.search(line)
         if not match:
             if candidate:
                 raise ValueError('malformed UART fragment header')

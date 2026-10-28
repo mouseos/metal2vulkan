@@ -26,13 +26,15 @@ process can exit before flushing, and diagnostic CPU and logging can perturb
 timing. Do not enable the feature in distributable images by default.
 
 Pass a log from exactly one boot to `python3 scripts/shader-capture/decode.py
-<log> <new-host-output-directory>`. The decoder refuses missing, duplicated,
-interleaved incorrectly, truncated or corrupted records, validates a SHA-256 over the sender PID, capture ordinal, word count, stage,
+<log> <new-host-output-directory>`. The decoder detects many missing, duplicated,
+interleaved, truncated or corrupted records, and validates a SHA-256 over the sender PID, capture ordinal, word count, stage,
 entry point, pipeline marker and SPIR-V bytes, and writes SPIR-V plus a manifest
 on the host. Each UART fragment also has an FNV-1a checksum over its outer PID,
 sequence, part numbers and payload; the outer and inner PIDs must match. These
 are corruption checks, not authentication against a sender that can recompute
-them. Shader data is private
+them. Loss of an entire capture and malformed fragments with ambiguous or lost
+line boundaries can go unnoticed; unrelated text can also resemble a fragment.
+Successful reconstruction does not prove the entire log is complete. Shader data is private
 input and is not to be committed. The PID and ordinal do not distinguish
 boots by themselves; the caller must segment the log first. Raw stderr records are rejected by default because they have no independent outer PID. The explicit `--unframed-stderr` option accepts them and marks the manifest as lacking outer PID verification.
 
