@@ -51,6 +51,12 @@ class DecodeTest(unittest.TestCase):
         lines = self.uart((self.begin, self.data, self.end))
         with self.assertRaises(ValueError):
             decode(lines + ['powervr-metal[backboardd]: sc00000038'])
+    def test_rejects_truncated_header_before_valid_fragment_on_same_line(self):
+        lines = self.uart((self.begin, self.data, self.end))
+        corrupted = lines.copy()
+        corrupted[0] = corrupted[0].replace(': sc', ': sc00000038sc', 1)
+        with self.assertRaises(ValueError):
+            decode(corrupted)
     def test_rejects_changed_metadata(self):
         for begin in (self.begin.replace('stage=Vertex', 'stage=Fragment'),
                       self.begin.replace('entryhex=6d61696e', 'entryhex=666f6f'),

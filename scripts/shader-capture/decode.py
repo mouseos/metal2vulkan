@@ -25,9 +25,10 @@ def checksum(pid, ident, count, stage, entry, data):
 def reassemble(lines):
     groups = {}
     for line in lines:
-        match = FRAGMENT.search(line)
+        candidate = FRAGMENT_CANDIDATE.search(line)
+        match = FRAGMENT.match(line, candidate.end() - 2) if candidate else FRAGMENT.search(line)
         if not match:
-            if FRAGMENT_CANDIDATE.search(line):
+            if candidate:
                 raise ValueError('malformed UART fragment header')
             yield line, None
             continue
